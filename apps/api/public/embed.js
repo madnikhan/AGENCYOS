@@ -6,7 +6,7 @@
     (script && script.getAttribute("data-target")) ||
     "reachline-blog";
   if (!siteKey || !apiBase) {
-    console.error("[Reachline] embed requires data-site-key and data-api");
+    console.error("[Agency OS] embed requires data-site-key and data-api");
     return;
   }
   let root = document.getElementById(rootId);
@@ -15,7 +15,7 @@
   }
   if (!root) {
     console.error(
-      "[Reachline] missing #" + rootId + " (or #kitchenline-blog) container"
+      "[Agency OS] missing #" + rootId + " (or #kitchenline-blog) container"
     );
     return;
   }

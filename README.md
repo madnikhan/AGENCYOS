@@ -1,4 +1,4 @@
-# Reachline — Agency SEO & Social Automation
+# Agency OS — AI Digital Marketing Automation
 
 Claude-powered agency tool for **any local business** (taxi, restaurant, mechanics, security, salon, and more). Draft multi-platform content, then **auto-publish when hybrid rules pass**.
 
@@ -9,7 +9,7 @@ Light, **responsive** dashboard · login auth · Settings for API keys · Analyt
 1. **Sign in** — agency email/password (seeded demo user below).
 2. **Settings** — paste agency API keys once (Meta, Claude, TikTok, YouTube, fal…).
 3. **Clients** — add a business with an **industry**, then Connect Facebook / Instagram / TikTok / YouTube (or paste a Page token).
-4. **Website blog** — copy the Reachline embed script onto any site.
+4. **Website blog** — copy the Agency OS embed script onto any site.
 5. **Create content** → optionally attach logos / brand boards / PDFs for Claude → drafts appear under **Posts** → **Review posts** when rules require approval → publish.
 6. **Analytics** — DB funnel plus live engagement for published Meta / YouTube posts.
 
@@ -95,7 +95,7 @@ Validates login, session cookie, stats, clients, brief create, posts, analytics,
 ## Monorepo
 
 ```
-apps/web          # Reachline UI
+apps/web          # Agency OS UI
 apps/api          # REST + auth + OAuth + Settings + analytics + embed
 apps/worker       # generate / media / publish
 packages/db       # Prisma + credentials resolver

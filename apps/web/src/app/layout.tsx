@@ -3,9 +3,9 @@ import { AuthShell } from "@/components/AuthShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Reachline Agency",
+  title: "Agency OS — AI Digital Marketing Automation",
   description:
-    "Claude-powered SEO and social publishing for any local business",
+    "AI-powered SEO and social publishing for any local business",
 };
 
 export default function RootLayout({

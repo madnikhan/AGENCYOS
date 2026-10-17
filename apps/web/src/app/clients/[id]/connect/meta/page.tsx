@@ -70,7 +70,7 @@ export default function MetaConnectPage() {
       </p>
       <h1>Choose Facebook Page</h1>
       <p className="muted">
-        Pick which Page Reachline should post to for this client. If the Page
+        Pick which Page Agency OS should post to for this client. If the Page
         has Instagram linked, you can connect that too.
       </p>
 

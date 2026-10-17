@@ -37,9 +37,9 @@ export default function LoginPage() {
       <form className="panel login-card form-grid" onSubmit={onSubmit}>
         <div>
           <p className="muted" style={{ margin: 0, letterSpacing: "0.12em", textTransform: "uppercase", fontSize: "0.75rem" }}>
-            Agency OS
+            AI Digital Marketing Automation
           </p>
-          <h1 style={{ marginTop: "0.35rem" }}>Reachline</h1>
+          <h1 style={{ marginTop: "0.35rem" }}>Agency OS</h1>
           <p className="muted">Sign in to manage clients and content.</p>
         </div>
         <label>

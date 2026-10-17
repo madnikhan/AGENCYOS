@@ -65,8 +65,8 @@ export function AppShell({
           <span />
         </button>
         <div className="topbar-brand">
-          <span>Agency OS</span>
-          Reachline
+          <span>AI Digital Marketing Automation</span>
+          Agency OS
         </div>
       </header>
 
@@ -81,8 +81,8 @@ export function AppShell({
 
       <aside className="nav" id="app-nav">
         <div className="brand">
-          <span>Agency OS</span>
-          Reachline
+          <span>AI Digital Marketing Automation</span>
+          Agency OS
         </div>
         {links.map((l) => (
           <Link

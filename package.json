@@ -1,0 +1,17 @@
+{
+  "name": "claude-seo-automation",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm -r --parallel run dev",
+    "build": "pnpm -r run build",
+    "db:generate": "pnpm --filter @seo/db generate",
+    "db:push": "pnpm --filter @seo/db push",
+    "db:studio": "pnpm --filter @seo/db studio",
+    "smoke": "node scripts/smoke-api.mjs",
+    "lint": "pnpm -r run lint"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

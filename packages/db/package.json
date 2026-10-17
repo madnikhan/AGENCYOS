@@ -1,0 +1,26 @@
+{
+  "name": "@seo/db",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "generate": "prisma generate",
+    "push": "pnpm exec dotenv -e ../../.env -- prisma db push",
+    "studio": "pnpm exec dotenv -e ../../.env -- prisma studio",
+    "build": "prisma generate && tsc",
+    "dev": "tsc --watch",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.1.0",
+    "@seo/shared": "workspace:*",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "dotenv-cli": "^8.0.0",
+    "prisma": "^6.1.0",
+    "typescript": "^5.7.2"
+  }
+}

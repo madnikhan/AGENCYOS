@@ -1,0 +1,286 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Platform {
+  FACEBOOK
+  INSTAGRAM
+  TIKTOK
+  YOUTUBE_SHORTS
+  WEBSITE_BLOG
+  PICTURE_AD
+}
+
+enum PostStatus {
+  DRAFT
+  PENDING_APPROVAL
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+  REJECTED
+}
+
+enum ContentType {
+  DAILY_SPECIAL
+  PROMO
+  BLOG
+  STORY
+  SHORT_VIDEO
+  PICTURE_AD
+  GENERAL
+}
+
+enum AssetType {
+  IMAGE
+  VIDEO
+}
+
+model AgencyUser {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String
+  passwordHash String?
+  role         String     @default("editor")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  approvals    Approval[]
+  sessions     Session[]
+}
+
+model Session {
+  id        String     @id @default(cuid())
+  tokenHash String     @unique
+  userId    String
+  user      AgencyUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime   @default(now())
+}
+
+model Client {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  blogSiteKey String   @unique @default(cuid())
+  industry    String?
+  locality    String?
+  websiteUrl  String?
+  phone       String?
+  address     String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brandKit           BrandKit?
+  channelConnections ChannelConnection[]
+  campaigns          Campaign[]
+  briefs             ContentBrief[]
+  assets             Asset[]
+  posts              Post[]
+  publishRule        PublishRule?
+  oauthPendings      OAuthPending[]
+}
+
+model OAuthPending {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  provider  String
+  payload   Json
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model BrandKit {
+  id             String   @id @default(cuid())
+  clientId       String   @unique
+  client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  voiceTone      String   @default("professional, local, clear")
+  tagline        String?
+  primaryColor   String   @default("#C45C26")
+  secondaryColor String   @default("#1A1A1A")
+  logoUrl        String?
+  bannedClaims   String[] @default([])
+  bannedWords    String[] @default([])
+  ctaDefaults    Json     @default("{\"primary\":\"Contact us\",\"book\":\"Book now\",\"call\":\"Call us\",\"order\":\"Get a quote\"}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model ChannelConnection {
+  id             String    @id @default(cuid())
+  clientId       String
+  client         Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  platform       Platform
+  accountLabel   String?
+  externalId     String?
+  accessTokenEnc String?
+  refreshTokenEnc String?
+  tokenExpiresAt DateTime?
+  metadata       Json      @default("{}")
+  connected      Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([clientId, platform])
+}
+
+model Campaign {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  startDate   DateTime?
+  endDate     DateTime?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  briefs      ContentBrief[]
+}
+
+model ContentBrief {
+  id                String      @id @default(cuid())
+  clientId          String
+  client            Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  campaignId        String?
+  campaign          Campaign?   @relation(fields: [campaignId], references: [id])
+  title             String
+  offer             String?
+  localityKeywords  String[]    @default([])
+  contentType       ContentType @default(GENERAL)
+  platforms         Platform[]
+  cta               String      @default("order")
+  notes             String?
+  scheduledAt       DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  posts             Post[]
+  attachments       BriefAttachment[]
+}
+
+model BriefAttachment {
+  id        String       @id @default(cuid())
+  briefId   String
+  brief     ContentBrief @relation(fields: [briefId], references: [id], onDelete: Cascade)
+  filename  String
+  mimeType  String
+  url       String
+  sizeBytes Int
+  createdAt DateTime     @default(now())
+}
+
+model Asset {
+  id        String    @id @default(cuid())
+  clientId  String
+  client    Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  type      AssetType
+  url       String
+  mimeType  String?
+  width     Int?
+  height    Int?
+  prompt    String?
+  metadata  Json      @default("{}")
+  createdAt DateTime  @default(now())
+  posts     Post[]
+}
+
+model Post {
+  id              String      @id @default(cuid())
+  clientId        String
+  client          Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  briefId         String?
+  brief           ContentBrief? @relation(fields: [briefId], references: [id])
+  platform        Platform
+  contentType     ContentType @default(GENERAL)
+  status          PostStatus  @default(DRAFT)
+  title           String?
+  slug            String?
+  body            String?
+  hashtags        String[]    @default([])
+  metaTitle       String?
+  metaDescription String?
+  altText         String?
+  ctaLabel        String?
+  confidence      Float?
+  assetId         String?
+  asset           Asset?      @relation(fields: [assetId], references: [id])
+  scheduledAt     DateTime?
+  publishedAt     DateTime?
+  externalPostId  String?
+  externalUrl     String?
+  ruleDecision    Json?
+  errorMessage    String?
+  engagement      Json?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  approvals       Approval[]
+  publishAttempts PublishAttempt[]
+}
+
+model PublishRule {
+  id                    String        @id @default(cuid())
+  clientId              String        @unique
+  client                Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  autoPublishEnabled    Boolean       @default(false)
+  allowlistedTypes      ContentType[] @default([DAILY_SPECIAL, GENERAL])
+  bannedWords           String[]      @default([])
+  postingWindows        Json          @default("[]")
+  quietHours            Json?
+  minConfidence         Float         @default(0.7)
+  forceApprovalTypes    ContentType[] @default([PROMO, BLOG, PICTURE_AD])
+  requireApprovalFirstN Int           @default(5)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+}
+
+model Approval {
+  id         String     @id @default(cuid())
+  postId     String
+  post       Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId     String?
+  user       AgencyUser? @relation(fields: [userId], references: [id])
+  action     String
+  note       String?
+  createdAt  DateTime   @default(now())
+}
+
+model PublishAttempt {
+  id           String   @id @default(cuid())
+  postId       String
+  post         Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  attemptNumber Int
+  success      Boolean
+  response     Json?
+  errorMessage String?
+  createdAt    DateTime @default(now())
+}
+
+/** Singleton agency credentials (id = "default"). Secrets stored encrypted. */
+model AgencySettings {
+  id                     String   @id @default("default")
+  anthropicApiKeyEnc     String?
+  falKeyEnc              String?
+  metaAppId              String?
+  metaAppSecretEnc       String?
+  metaRedirectUri        String?
+  tiktokClientKey        String?
+  tiktokClientSecretEnc  String?
+  tiktokRedirectUri      String?
+  googleClientId         String?
+  googleClientSecretEnc  String?
+  googleRedirectUri      String?
+  creatomateApiKeyEnc    String?
+  creatomateTemplateId   String?
+  slackWebhookUrl        String?
+  resendApiKeyEnc        String?
+  notifyEmailFrom        String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}

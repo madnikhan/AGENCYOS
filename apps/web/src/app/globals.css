@@ -511,6 +511,27 @@ textarea {
   font-size: 0.85rem;
 }
 
+@media print {
+  .no-print,
+  .nav,
+  .topbar,
+  .nav-backdrop,
+  .nav-toggle {
+    display: none !important;
+  }
+
+  .shell {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+
+  .main {
+    overflow: visible;
+    padding: 0;
+  }
+}
+
 .nav-footer {
   margin-top: 2rem;
   padding-top: 1rem;
@@ -556,4 +577,237 @@ textarea {
 .badge.pending {
   background: rgba(196, 92, 38, 0.12);
   color: var(--accent-deep);
+}
+
+/* —— Standalone comparison deck (/slide) —— */
+.slide-deck {
+  min-height: 100dvh;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 2.5rem;
+}
+
+.slide-deck-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.slide-brand {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+}
+
+.slide-deck-title {
+  margin: 0.15rem 0 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.slide-hint {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.slide-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1.25rem;
+}
+
+.slide-pill {
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.slide-pill.active {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+
+.slide-stage {
+  border-top: 1px solid var(--line);
+  padding-top: 1.25rem;
+}
+
+.slide-panel h1 {
+  margin: 0.35rem 0 0.4rem;
+  font-size: clamp(1.6rem, 3vw, 2.1rem);
+}
+
+.slide-sub {
+  margin: 0 0 1.25rem;
+  max-width: 52rem;
+}
+
+.slide-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+}
+
+.slide-kicker {
+  color: var(--accent-deep);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.slide-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.slide-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.slide-callout {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  background: var(--bg-elevated);
+}
+
+.slide-callout p {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+}
+
+.slide-callout.info {
+  border-color: rgba(59, 110, 165, 0.35);
+  background: rgba(59, 110, 165, 0.06);
+}
+
+.slide-callout.warn {
+  border-color: rgba(166, 124, 26, 0.35);
+  background: rgba(166, 124, 26, 0.08);
+}
+
+.slide-callout.ok {
+  border-color: rgba(47, 125, 76, 0.35);
+  background: rgba(47, 125, 76, 0.08);
+}
+
+.slide-caption {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+}
+
+.slide-card-tag {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-deep);
+  margin-bottom: 0.35rem;
+}
+
+.slide-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+}
+
+.slide-list li {
+  margin: 0.35rem 0;
+}
+
+.slide-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.slide-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.slide-chart-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.slide-chart-label {
+  fill: var(--muted);
+  font-size: 10px;
+  font-family: var(--font-body);
+}
+
+.slide-chart-value {
+  fill: var(--ink);
+  font-size: 10px;
+  font-family: var(--font-body);
+}
+
+.slide-chart-center {
+  fill: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--font-display);
+}
+
+.slide-legend,
+.slide-pie-legend {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.slide-legend li,
+.slide-pie-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.slide-legend span,
+.slide-pie-legend span {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.slide-pie-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+@media (max-width: 800px) {
+  .slide-grid-2 {
+    grid-template-columns: 1fr;
+  }
 }

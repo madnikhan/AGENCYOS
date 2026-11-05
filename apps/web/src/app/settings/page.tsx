@@ -11,6 +11,7 @@ type SettingsStatus = {
   tiktokConfigured: boolean;
   youtubeConfigured: boolean;
   creatomateConfigured: boolean;
+  dataForSeoConfigured: boolean;
   metaAppId: string;
   tiktokClientKey: string;
   googleClientId: string;
@@ -18,6 +19,7 @@ type SettingsStatus = {
   metaRedirectUri: string;
   tiktokRedirectUri: string;
   googleRedirectUri: string;
+  gscRedirectUri: string;
   sources: Record<string, string>;
 };
 
@@ -114,6 +116,15 @@ export default function SettingsPage() {
             <div className="channel-card">
               <strong>Creatomate video</strong>
               <div>{badge(status.creatomateConfigured)}</div>
+            </div>
+            <div className="channel-card">
+              <strong>DataForSEO</strong>
+              <div>
+                {badge(
+                  status.dataForSeoConfigured,
+                  status.sources?.dataForSeo
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -220,6 +231,40 @@ export default function SettingsPage() {
             defaultValue={
               status?.googleRedirectUri ||
               "http://localhost:4000/oauth/youtube/callback"
+            }
+          />
+        </label>
+
+        <h2 style={{ margin: "1rem 0 0" }}>SEO research (DataForSEO)</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Login + password from your DataForSEO account. Without them, SEO pages
+          show demo data. Search Console uses the Google OAuth client above —
+          add redirect URI{" "}
+          <code>
+            {status?.gscRedirectUri ||
+              "http://localhost:4000/oauth/gsc/callback"}
+          </code>
+          .
+        </p>
+        <label>
+          DataForSEO login (email)
+          <input
+            name="dataForSeoLogin"
+            type="text"
+            autoComplete="off"
+            placeholder={
+              status?.dataForSeoConfigured ? "•••• leave blank to keep" : ""
+            }
+          />
+        </label>
+        <label>
+          DataForSEO password / API password
+          <input
+            name="dataForSeoPassword"
+            type="password"
+            autoComplete="off"
+            placeholder={
+              status?.dataForSeoConfigured ? "•••• leave blank to keep" : ""
             }
           />
         </label>

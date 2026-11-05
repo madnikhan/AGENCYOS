@@ -44,6 +44,10 @@ export type AgencyCredentials = {
     apiKey: string;
     templateId: string;
   };
+  dataForSeo: {
+    login: string;
+    password: string;
+  };
   slackWebhookUrl: string;
   resendApiKey: string;
   notifyEmailFrom: string;
@@ -56,6 +60,7 @@ export type AgencySettingsStatus = {
   tiktokConfigured: boolean;
   youtubeConfigured: boolean;
   creatomateConfigured: boolean;
+  dataForSeoConfigured: boolean;
   metaAppId: string;
   tiktokClientKey: string;
   googleClientId: string;
@@ -63,6 +68,7 @@ export type AgencySettingsStatus = {
   metaRedirectUri: string;
   tiktokRedirectUri: string;
   googleRedirectUri: string;
+  gscRedirectUri: string;
   slackConfigured: boolean;
   notifyEmailFrom: string;
   sources: {
@@ -71,6 +77,7 @@ export type AgencySettingsStatus = {
     tiktok: "db" | "env" | "none";
     youtube: "db" | "env" | "none";
     fal: "db" | "env" | "none";
+    dataForSeo: "db" | "env" | "none";
   };
 };
 
@@ -103,6 +110,10 @@ function envFallback(): AgencyCredentials {
       apiKey: process.env.CREATOMATE_API_KEY ?? "",
       templateId: process.env.CREATOMATE_TEMPLATE_ID ?? "",
     },
+    dataForSeo: {
+      login: process.env.DATAFORSEO_LOGIN ?? "",
+      password: process.env.DATAFORSEO_PASSWORD ?? "",
+    },
     slackWebhookUrl: process.env.SLACK_WEBHOOK_URL ?? "",
     resendApiKey: process.env.RESEND_API_KEY ?? "",
     notifyEmailFrom:
@@ -134,6 +145,10 @@ export async function getAgencyCredentials(): Promise<AgencyCredentials> {
   const creatomateKey =
     decryptOpt(row.creatomateApiKeyEnc) || fallback.creatomate.apiKey;
   const resend = decryptOpt(row.resendApiKeyEnc) || fallback.resendApiKey;
+  const dfsLogin =
+    decryptOpt(row.dataForSeoLoginEnc) || fallback.dataForSeo.login;
+  const dfsPassword =
+    decryptOpt(row.dataForSeoPasswordEnc) || fallback.dataForSeo.password;
 
   return {
     anthropicApiKey: anthropic,
@@ -156,6 +171,10 @@ export async function getAgencyCredentials(): Promise<AgencyCredentials> {
     creatomate: {
       apiKey: creatomateKey,
       templateId: row.creatomateTemplateId || fallback.creatomate.templateId,
+    },
+    dataForSeo: {
+      login: dfsLogin,
+      password: dfsPassword,
     },
     slackWebhookUrl: row.slackWebhookUrl || fallback.slackWebhookUrl,
     resendApiKey: resend,
@@ -183,6 +202,9 @@ export async function getAgencySettingsStatus(): Promise<AgencySettingsStatus> {
   const youtubeFromDb = Boolean(
     row?.googleClientId && decryptOpt(row?.googleClientSecretEnc)
   );
+  const dfsFromDb = Boolean(
+    decryptOpt(row?.dataForSeoLoginEnc) && decryptOpt(row?.dataForSeoPasswordEnc)
+  );
 
   return {
     claudeConfigured: Boolean(creds.anthropicApiKey),
@@ -197,6 +219,9 @@ export async function getAgencySettingsStatus(): Promise<AgencySettingsStatus> {
     creatomateConfigured: Boolean(
       creds.creatomate.apiKey && creds.creatomate.templateId
     ),
+    dataForSeoConfigured: Boolean(
+      creds.dataForSeo.login && creds.dataForSeo.password
+    ),
     metaAppId: creds.meta.appId,
     tiktokClientKey: creds.tiktok.clientKey,
     googleClientId: creds.google.clientId,
@@ -204,6 +229,9 @@ export async function getAgencySettingsStatus(): Promise<AgencySettingsStatus> {
     metaRedirectUri: creds.meta.redirectUri,
     tiktokRedirectUri: creds.tiktok.redirectUri,
     googleRedirectUri: creds.google.redirectUri,
+    gscRedirectUri:
+      process.env.GSC_REDIRECT_URI ??
+      "http://localhost:4000/oauth/gsc/callback",
     slackConfigured: Boolean(creds.slackWebhookUrl),
     notifyEmailFrom: creds.notifyEmailFrom,
     sources: {
@@ -228,6 +256,11 @@ export async function getAgencySettingsStatus(): Promise<AgencySettingsStatus> {
           ? "env"
           : "none",
       fal: falFromDb ? "db" : creds.falKey ? "env" : "none",
+      dataForSeo: dfsFromDb
+        ? "db"
+        : creds.dataForSeo.login
+          ? "env"
+          : "none",
     },
   };
 }
@@ -246,6 +279,8 @@ export type UpdateAgencySettingsInput = {
   googleRedirectUri?: string;
   creatomateApiKey?: string;
   creatomateTemplateId?: string;
+  dataForSeoLogin?: string;
+  dataForSeoPassword?: string;
   slackWebhookUrl?: string;
   resendApiKey?: string;
   notifyEmailFrom?: string;
@@ -305,6 +340,15 @@ export async function updateAgencySettings(
   }
   if (input.creatomateTemplateId !== undefined) {
     data.creatomateTemplateId = input.creatomateTemplateId || null;
+  }
+  if (input.dataForSeoLogin !== undefined && input.dataForSeoLogin !== "") {
+    data.dataForSeoLoginEnc = encryptOpt(input.dataForSeoLogin);
+  }
+  if (
+    input.dataForSeoPassword !== undefined &&
+    input.dataForSeoPassword !== ""
+  ) {
+    data.dataForSeoPasswordEnc = encryptOpt(input.dataForSeoPassword);
   }
   if (input.slackWebhookUrl !== undefined) {
     data.slackWebhookUrl = input.slackWebhookUrl || null;

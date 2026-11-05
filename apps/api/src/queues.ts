@@ -6,6 +6,7 @@ import {
   type MediaJobData,
   type NotifyJobData,
   type PublishJobData,
+  type SeoSyncJobData,
 } from "@seo/shared";
 import { env } from "./config";
 
@@ -23,6 +24,9 @@ export const mediaQueue = new Queue<MediaJobData>(QUEUE_NAMES.MEDIA, {
   connection,
 });
 export const notifyQueue = new Queue<NotifyJobData>(QUEUE_NAMES.NOTIFY, {
+  connection,
+});
+export const seoSyncQueue = new Queue<SeoSyncJobData>(QUEUE_NAMES.SEO_SYNC, {
   connection,
 });
 
@@ -50,4 +54,11 @@ export async function enqueueMedia(data: MediaJobData) {
 
 export async function enqueueNotify(data: NotifyJobData) {
   await notifyQueue.add("notify", data, { attempts: 2 });
+}
+
+export async function enqueueSeoSync(data: SeoSyncJobData) {
+  await seoSyncQueue.add("seo-sync", data, {
+    attempts: 2,
+    backoff: { type: "exponential", delay: 3000 },
+  });
 }

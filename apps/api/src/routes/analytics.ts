@@ -279,6 +279,11 @@ analyticsRouter.get("/summary", async (req, res) => {
     });
   }
 
+  const [trackedKeywords, selectedKeywords] = await Promise.all([
+    db.rankKeyword.count({ where: { active: true } }),
+    db.seoKeyword.count({ where: { selectedForBrief: true } }),
+  ]);
+
   res.json({
     windowDays: 30,
     byStatus: Object.fromEntries(
@@ -295,5 +300,9 @@ analyticsRouter.get("/summary", async (req, res) => {
     publishSuccess: published,
     publishFailed: failed,
     engagement: engagementRows,
+    seo: {
+      trackedKeywords,
+      selectedKeywords,
+    },
   });
 });

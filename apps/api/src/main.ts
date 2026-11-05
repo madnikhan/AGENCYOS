@@ -11,6 +11,7 @@ import { dashboardRouter } from "./routes/dashboard";
 import { publicRouter } from "./routes/public";
 import { settingsRouter } from "./routes/settings";
 import { analyticsRouter } from "./routes/analytics";
+import { seoRouter } from "./routes/seo";
 
 const app = express();
 app.use(
@@ -38,6 +39,7 @@ app.use("/channels", channelsRouter);
 app.use("/oauth", oauthRouter);
 app.use("/settings", settingsRouter);
 app.use("/analytics", analyticsRouter);
+app.use("/seo", seoRouter);
 app.use("/public", publicRouter);
 
 app.use(

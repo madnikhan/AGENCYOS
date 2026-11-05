@@ -10,12 +10,12 @@ type Me = { id: string; email: string; name: string; role: string };
 export function AuthShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const isLogin = pathname === "/login";
+  const isPublic = pathname === "/login" || pathname === "/slide";
   const [me, setMe] = useState<Me | null>(null);
-  const [ready, setReady] = useState(isLogin);
+  const [ready, setReady] = useState(isPublic);
 
   useEffect(() => {
-    if (isLogin) {
+    if (isPublic) {
       setReady(true);
       return;
     }
@@ -41,9 +41,9 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [isLogin, pathname, router]);
+  }, [isPublic, pathname, router]);
 
-  if (isLogin) {
+  if (isPublic) {
     return <>{children}</>;
   }
 

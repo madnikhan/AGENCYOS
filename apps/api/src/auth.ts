@@ -84,7 +84,7 @@ function isPublicPath(path: string, method: string) {
   // OAuth provider callbacks must stay public; starts require auth
   if (
     method === "GET" &&
-    /^\/oauth\/(meta|tiktok|youtube)\/callback$/.test(path)
+    /^\/oauth\/(meta|tiktok|youtube|gsc)\/callback$/.test(path)
   ) {
     return true;
   }

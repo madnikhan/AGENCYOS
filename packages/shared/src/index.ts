@@ -151,6 +151,7 @@ export const QUEUE_NAMES = {
   PUBLISH: "publish",
   MEDIA: "media",
   NOTIFY: "notify",
+  SEO_SYNC: "seo-sync",
 } as const;
 
 export type GenerateJobData = {
@@ -175,6 +176,11 @@ export type NotifyJobData = {
   clientId: string;
   postId: string;
   message: string;
+};
+
+export type SeoSyncJobData = {
+  clientId?: string;
+  type: "gsc_ranks" | "all" | "daily_all";
 };
 
 export type RuleDecision = {

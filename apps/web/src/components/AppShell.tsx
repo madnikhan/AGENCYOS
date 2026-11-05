@@ -8,6 +8,7 @@ import { API_URL } from "@/lib/api";
 const links = [
   { href: "/", label: "Dashboard" },
   { href: "/analytics", label: "Analytics" },
+  { href: "/seo", label: "SEO" },
   { href: "/approval", label: "Review posts" },
   { href: "/clients", label: "Clients" },
   { href: "/briefs/new", label: "Create content" },

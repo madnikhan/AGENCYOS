@@ -11,18 +11,20 @@ Light, **responsive** dashboard · login auth · Settings for API keys · Analyt
 3. **Clients** — add a business with an **industry**, then Connect Facebook / Instagram / TikTok / YouTube (or paste a Page token).
 4. **Website blog** — copy the Agency OS embed script onto any site.
 5. **Create content** → optionally attach logos / brand boards / PDFs for Claude → drafts appear under **Posts** → **Review posts** when rules require approval → publish.
-6. **Analytics** — DB funnel plus live engagement for published Meta / YouTube posts.
+6. **SEO** — research domains/keywords (DataForSEO), track ranks (Search Console), backlinks, site checks, then **Add to brief**.
+7. **Analytics** — DB funnel, engagement, plus SEO tracked/selected keyword counts.
+8. **Client report** — print-friendly monthly HTML from `/clients/[id]/report`.
 
 On Create content you can attach up to 5 images or PDFs (10MB each). Claude uses them (plus brand kit colors) so drafts match the client’s look.
 
 ```
-Login → Settings (API keys)
+Login → Settings (API keys + DataForSEO)
         ↓
-Client Connect (Page tokens in DB)
+Client Connect (social + optional Search Console)
         ↓
-Create content → Worker → Approve/Publish
+SEO research → Create content → Worker → Approve/Publish
         ↓
-Analytics (DB + platform insights)
+Analytics + client report
 ```
 
 ## Minimal `.env` (infrastructure)
@@ -61,7 +63,16 @@ pnpm --filter @seo/web dev
   **Demo:** `editor@agency.local` / `reachline-demo` (change after first login)
 - Dashboard: http://localhost:3000
 - Settings: http://localhost:3000/settings
+- SEO: http://localhost:3000/seo
 - Analytics: http://localhost:3000/analytics
+
+## SEO setup (DataForSEO + Search Console)
+
+1. **DataForSEO** — create an account at [dataforseo.com](https://dataforseo.com/), then in **Settings** paste login (email) + API password. Without credentials, SEO pages return **demo** keyword/domain/backlink data so you can still walk the flow.
+2. **Google Search Console** — reuse the same Google OAuth client as YouTube. In Google Cloud Console, add authorized redirect URI:
+   `http://localhost:4000/oauth/gsc/callback` (or your API host + `/oauth/gsc/callback`).
+3. Open a client → **SEO** → set the GSC property URL (e.g. `https://example.com/` or `sc-domain:example.com`) → **Connect Search Console**.
+4. Research keywords → select for brief → **Create content** (prefills locality keywords). Rank sync runs on demand and daily via the worker queue.
 
 ## Smoke test
 
@@ -95,10 +106,10 @@ Validates login, session cookie, stats, clients, brief create, posts, analytics,
 ## Monorepo
 
 ```
-apps/web          # Agency OS UI
-apps/api          # REST + auth + OAuth + Settings + analytics + embed
-apps/worker       # generate / media / publish
+apps/web          # Agency OS UI (incl. SEO + client reports)
+apps/api          # REST + auth + OAuth + Settings + SEO + analytics + embed
+apps/worker       # generate / media / publish / daily GSC SEO sync
 packages/db       # Prisma + credentials resolver
-packages/shared   # Zod, crypto, rules
+packages/shared   # Zod, crypto, rules, queue names
 scripts/          # smoke-api.mjs
 ```

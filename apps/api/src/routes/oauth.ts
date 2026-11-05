@@ -431,3 +431,109 @@ oauthRouter.get("/youtube/callback", async (req, res) => {
 
   res.redirect(`${env.webUrl}/clients/${clientId}?connected=youtube`);
 });
+
+/** Google Search Console — reuses Google OAuth client credentials */
+oauthRouter.get("/gsc/start", async (req, res) => {
+  const clientId = req.query.clientId as string;
+  const siteUrl = (req.query.siteUrl as string) || "";
+  const creds = await getAgencyCredentials();
+  if (!clientId) {
+    return redirectOAuthError(res, undefined, "missing_client");
+  }
+  if (!creds.google.clientId || !creds.google.clientSecret) {
+    return redirectOAuthError(res, clientId, "gsc_not_configured");
+  }
+  const redirectUri =
+    process.env.GSC_REDIRECT_URI ??
+    "http://localhost:4000/oauth/gsc/callback";
+  const state = Buffer.from(JSON.stringify({ clientId, siteUrl })).toString(
+    "base64url"
+  );
+  const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  url.searchParams.set("client_id", creds.google.clientId);
+  url.searchParams.set("redirect_uri", redirectUri);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set(
+    "scope",
+    "https://www.googleapis.com/auth/webmasters.readonly"
+  );
+  url.searchParams.set("access_type", "offline");
+  url.searchParams.set("prompt", "consent");
+  url.searchParams.set("state", state);
+  res.redirect(url.toString());
+});
+
+oauthRouter.get("/gsc/callback", async (req, res) => {
+  const { code, state } = req.query as { code?: string; state?: string };
+  if (!code || !state) return res.status(400).send("Missing code/state");
+  const parsed = JSON.parse(
+    Buffer.from(state, "base64url").toString("utf8")
+  ) as { clientId: string; siteUrl?: string };
+  const { clientId } = parsed;
+  let siteUrl = parsed.siteUrl || "";
+  const creds = await getAgencyCredentials();
+  const redirectUri =
+    process.env.GSC_REDIRECT_URI ??
+    "http://localhost:4000/oauth/gsc/callback";
+
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      code,
+      client_id: creds.google.clientId,
+      client_secret: creds.google.clientSecret,
+      redirect_uri: redirectUri,
+      grant_type: "authorization_code",
+    }),
+  });
+  const tokenJson = (await tokenRes.json()) as {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+    error?: string;
+  };
+  if (!tokenJson.access_token) {
+    return redirectOAuthError(res, clientId, "gsc_token_failed");
+  }
+
+  if (!siteUrl) {
+    const client = await db.client.findUnique({ where: { id: clientId } });
+    siteUrl = client?.websiteUrl || "";
+  }
+
+  await db.gscConnection.upsert({
+    where: { clientId },
+    create: {
+      clientId,
+      siteUrl: siteUrl || null,
+      accessTokenEnc: encryptToken(
+        tokenJson.access_token,
+        env.tokenEncryptionKey
+      ),
+      refreshTokenEnc: tokenJson.refresh_token
+        ? encryptToken(tokenJson.refresh_token, env.tokenEncryptionKey)
+        : null,
+      tokenExpiresAt: tokenJson.expires_in
+        ? new Date(Date.now() + tokenJson.expires_in * 1000)
+        : null,
+      connected: true,
+    },
+    update: {
+      siteUrl: siteUrl || undefined,
+      accessTokenEnc: encryptToken(
+        tokenJson.access_token,
+        env.tokenEncryptionKey
+      ),
+      refreshTokenEnc: tokenJson.refresh_token
+        ? encryptToken(tokenJson.refresh_token, env.tokenEncryptionKey)
+        : undefined,
+      tokenExpiresAt: tokenJson.expires_in
+        ? new Date(Date.now() + tokenJson.expires_in * 1000)
+        : undefined,
+      connected: true,
+    },
+  });
+
+  res.redirect(`${env.webUrl}/clients/${clientId}/seo?connected=gsc`);
+});

@@ -30,6 +30,10 @@ type Summary = {
     externalUrl: string | null;
     engagement: Engagement;
   }>;
+  seo?: {
+    trackedKeywords: number;
+    selectedKeywords: number;
+  };
 };
 
 export default function AnalyticsPage() {
@@ -99,6 +103,30 @@ export default function AnalyticsPage() {
                 <div className="value">{value}</div>
               </div>
             ))}
+          </div>
+
+          <div className="panel">
+            <div className="row">
+              <div>
+                <h2>SEO</h2>
+                <p className="muted" style={{ margin: 0 }}>
+                  Rank watchlist and keywords selected for briefs across clients.
+                </p>
+              </div>
+              <Link className="btn secondary" href="/seo">
+                Open SEO
+              </Link>
+            </div>
+            <div className="stats" style={{ marginTop: "1rem", marginBottom: 0 }}>
+              <div className="stat">
+                <div className="label">Tracked keywords</div>
+                <div className="value">{data.seo?.trackedKeywords ?? 0}</div>
+              </div>
+              <div className="stat">
+                <div className="label">Selected for briefs</div>
+                <div className="value">{data.seo?.selectedKeywords ?? 0}</div>
+              </div>
+            </div>
           </div>
 
           <div className="panel">

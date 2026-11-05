@@ -3,11 +3,13 @@ import IORedis from "ioredis";
 import { db } from "@seo/db";
 import {
   QUEUE_NAMES,
+  decryptToken,
   evaluatePublishRules,
   type GenerateJobData,
   type MediaJobData,
   type NotifyJobData,
   type PublishJobData,
+  type SeoSyncJobData,
   type PublishRuleInput,
   type ContentType,
 } from "@seo/shared";
@@ -514,5 +516,139 @@ new Worker<NotifyJobData>(
   },
   { connection }
 );
+
+async function syncClientSeoRanks(clientId: string) {
+  const client = await db.client.findUnique({
+    where: { id: clientId },
+    include: {
+      gscConnection: true,
+      rankKeywords: { where: { active: true } },
+    },
+  });
+  if (!client) throw new Error("Client not found");
+
+  const gsc = client.gscConnection;
+  let accessToken = "";
+  if (gsc?.accessTokenEnc) {
+    try {
+      accessToken = decryptToken(gsc.accessTokenEnc, env.tokenEncryptionKey);
+    } catch {
+      accessToken = "";
+    }
+  }
+
+  if (gsc?.connected && gsc.siteUrl && accessToken) {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - 28);
+    const body = {
+      startDate: start.toISOString().slice(0, 10),
+      endDate: end.toISOString().slice(0, 10),
+      dimensions: ["query"],
+      rowLimit: 25,
+    };
+    const res = await fetch(
+      `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(gsc.siteUrl)}/searchAnalytics/query`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      }
+    );
+    if (res.ok) {
+      const json = (await res.json()) as {
+        rows?: Array<{
+          keys?: string[];
+          position?: number;
+          clicks?: number;
+          impressions?: number;
+        }>;
+      };
+      for (const row of json.rows ?? []) {
+        const keyword = row.keys?.[0];
+        if (!keyword) continue;
+        const rankKw = await db.rankKeyword.upsert({
+          where: {
+            clientId_keyword: { clientId, keyword },
+          },
+          create: { clientId, keyword, active: true },
+          update: { active: true },
+        });
+        await db.rankSnapshot.create({
+          data: {
+            rankKeywordId: rankKw.id,
+            position: row.position ?? null,
+            clicks: row.clicks ?? null,
+            impressions: row.impressions ?? null,
+            source: "gsc",
+          },
+        });
+      }
+      return;
+    }
+    console.warn(`[seo-sync] GSC query failed: ${res.status}`);
+  }
+
+  for (const [i, rk] of client.rankKeywords.entries()) {
+    await db.rankSnapshot.create({
+      data: {
+        rankKeywordId: rk.id,
+        position: 10 + i * 2,
+        source: "demo",
+      },
+    });
+  }
+}
+
+const seoSyncQueue = new Queue<SeoSyncJobData>(QUEUE_NAMES.SEO_SYNC, {
+  connection,
+});
+
+new Worker<SeoSyncJobData>(
+  QUEUE_NAMES.SEO_SYNC,
+  async (job) => {
+    if (job.data.type === "daily_all") {
+      const connections = await db.gscConnection.findMany({
+        where: { connected: true },
+        select: { clientId: true },
+      });
+      const withRanks = await db.rankKeyword.findMany({
+        where: { active: true },
+        select: { clientId: true },
+        distinct: ["clientId"],
+      });
+      const ids = new Set([
+        ...connections.map((c) => c.clientId),
+        ...withRanks.map((r) => r.clientId),
+      ]);
+      console.log(`[seo-sync] daily_all clients=${ids.size}`);
+      for (const clientId of ids) {
+        await syncClientSeoRanks(clientId);
+      }
+      return;
+    }
+
+    const clientId = job.data.clientId;
+    if (!clientId) throw new Error("clientId required");
+    console.log(`[seo-sync] client=${clientId}`);
+    await syncClientSeoRanks(clientId);
+  },
+  { connection, concurrency: 1 }
+);
+
+void seoSyncQueue
+  .add(
+    "seo-sync-daily",
+    { type: "daily_all" },
+    {
+      repeat: { pattern: "0 6 * * *" },
+      jobId: "seo-sync-daily",
+    }
+  )
+  .then(() => console.log("[seo-sync] daily job scheduled (06:00 UTC)"))
+  .catch((err) => console.warn("[seo-sync] schedule failed", err));
 
 console.log("Worker running — queues:", Object.values(QUEUE_NAMES).join(", "));

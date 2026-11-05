@@ -84,6 +84,12 @@ model Client {
   posts              Post[]
   publishRule        PublishRule?
   oauthPendings      OAuthPending[]
+  seoKeywords        SeoKeyword[]
+  seoDomainSnapshots SeoDomainSnapshot[]
+  rankKeywords       RankKeyword[]
+  backlinkSnapshots  BacklinkSnapshot[]
+  seoAuditSnapshots  SeoAuditSnapshot[]
+  gscConnection      GscConnection?
 }
 
 model OAuthPending {
@@ -281,6 +287,105 @@ model AgencySettings {
   slackWebhookUrl        String?
   resendApiKeyEnc        String?
   notifyEmailFrom        String?
+  dataForSeoLoginEnc     String?
+  dataForSeoPasswordEnc  String?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
+}
+
+model SeoKeyword {
+  id               String   @id @default(cuid())
+  clientId         String
+  client           Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  keyword          String
+  volume           Int?
+  difficulty       Float?
+  cpc              Float?
+  intent           String?
+  source           String   @default("dataforseo")
+  selectedForBrief Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([clientId, keyword])
+  @@index([clientId, selectedForBrief])
+}
+
+model SeoDomainSnapshot {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  domain    String
+  payload   Json
+  source    String   @default("dataforseo")
+  fetchedAt DateTime @default(now())
+
+  @@index([clientId, fetchedAt])
+}
+
+model RankKeyword {
+  id        String         @id @default(cuid())
+  clientId  String
+  client    Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  keyword   String
+  active    Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  snapshots RankSnapshot[]
+
+  @@unique([clientId, keyword])
+}
+
+model RankSnapshot {
+  id            String      @id @default(cuid())
+  rankKeywordId String
+  rankKeyword   RankKeyword @relation(fields: [rankKeywordId], references: [id], onDelete: Cascade)
+  date          DateTime    @default(now())
+  position      Float?
+  url           String?
+  clicks        Int?
+  impressions   Int?
+  source        String      @default("gsc")
+
+  @@index([rankKeywordId, date])
+}
+
+model BacklinkSnapshot {
+  id               String   @id @default(cuid())
+  clientId         String
+  client           Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  referringDomains Int?
+  backlinks        Int?
+  newLinks         Int?
+  lostLinks        Int?
+  topReferrers     Json     @default("[]")
+  payload          Json     @default("{}")
+  fetchedAt        DateTime @default(now())
+
+  @@index([clientId, fetchedAt])
+}
+
+model SeoAuditSnapshot {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  url       String
+  score     Float?
+  issues    Json     @default("[]")
+  payload   Json     @default("{}")
+  fetchedAt DateTime @default(now())
+
+  @@index([clientId, fetchedAt])
+}
+
+model GscConnection {
+  id               String    @id @default(cuid())
+  clientId         String    @unique
+  client           Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  siteUrl          String?
+  accessTokenEnc   String?
+  refreshTokenEnc  String?
+  tokenExpiresAt   DateTime?
+  connected        Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }

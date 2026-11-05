@@ -112,12 +112,18 @@ oauthRouter.get("/meta/start", async (req, res) => {
   if (!creds.meta.appId || !creds.meta.appSecret) {
     return redirectOAuthError(res, clientId, "meta_not_configured");
   }
+  // Facebook Login for Business + Page-linked Instagram Graph API.
+  // These must also be added under the Meta app's use cases / permissions,
+  // or Meta returns "Invalid Scopes" to developers.
   const scopes = [
-    "pages_manage_posts",
+    "public_profile",
+    "pages_show_list",
     "pages_read_engagement",
+    "pages_manage_posts",
+    "pages_manage_metadata",
+    "business_management",
     "instagram_basic",
     "instagram_content_publish",
-    "pages_show_list",
   ].join(",");
   const state = Buffer.from(JSON.stringify({ clientId })).toString("base64url");
   const url = new URL("https://www.facebook.com/v21.0/dialog/oauth");

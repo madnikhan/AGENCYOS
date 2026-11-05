@@ -13,7 +13,12 @@ settingsRouter.get("/", async (_req, res) => {
 });
 
 settingsRouter.put("/", async (req, res) => {
-  const body = req.body as UpdateAgencySettingsInput;
-  const status = await updateAgencySettings(body ?? {});
-  res.json(status);
+  try {
+    const body = req.body as UpdateAgencySettingsInput;
+    const status = await updateAgencySettings(body ?? {});
+    res.json(status);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Save failed";
+    res.status(400).json({ error: message });
+  }
 });

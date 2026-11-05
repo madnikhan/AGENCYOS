@@ -276,6 +276,7 @@ model AgencySettings {
   metaAppId              String?
   metaAppSecretEnc       String?
   metaRedirectUri        String?
+  metaConfigId           String?
   tiktokClientKey        String?
   tiktokClientSecretEnc  String?
   tiktokRedirectUri      String?

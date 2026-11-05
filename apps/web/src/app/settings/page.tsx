@@ -13,6 +13,7 @@ type SettingsStatus = {
   creatomateConfigured: boolean;
   dataForSeoConfigured: boolean;
   metaAppId: string;
+  metaConfigId: string;
   tiktokClientKey: string;
   googleClientId: string;
   creatomateTemplateId: string;
@@ -174,6 +175,21 @@ export default function SettingsPage() {
             }
           />
         </label>
+        <label>
+          Login for Business config ID
+          <input
+            name="metaConfigId"
+            defaultValue={status?.metaConfigId ?? ""}
+            placeholder="From Meta → Facebook Login for Business → Configurations"
+          />
+        </label>
+        <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
+          Required for new Meta apps. Create a configuration with Pages +
+          Instagram assets/permissions, then paste the Configuration ID here.
+          Also whitelist{" "}
+          <code>http://localhost:4000/oauth/meta/callback</code> under Valid
+          OAuth Redirect URIs.
+        </p>
 
         <h2 style={{ margin: "1rem 0 0" }}>TikTok</h2>
         <label>

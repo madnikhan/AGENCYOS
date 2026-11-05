@@ -29,6 +29,8 @@ export type AgencyCredentials = {
     appId: string;
     appSecret: string;
     redirectUri: string;
+    /** Facebook Login for Business configuration ID (optional). */
+    configId: string;
   };
   tiktok: {
     clientKey: string;
@@ -62,6 +64,7 @@ export type AgencySettingsStatus = {
   creatomateConfigured: boolean;
   dataForSeoConfigured: boolean;
   metaAppId: string;
+  metaConfigId: string;
   tiktokClientKey: string;
   googleClientId: string;
   creatomateTemplateId: string;
@@ -91,6 +94,7 @@ function envFallback(): AgencyCredentials {
       redirectUri:
         process.env.META_REDIRECT_URI ??
         "http://localhost:4000/oauth/meta/callback",
+      configId: process.env.META_LOGIN_CONFIG_ID ?? "",
     },
     tiktok: {
       clientKey: process.env.TIKTOK_CLIENT_KEY ?? "",
@@ -157,6 +161,7 @@ export async function getAgencyCredentials(): Promise<AgencyCredentials> {
       appId: row.metaAppId || fallback.meta.appId,
       appSecret: metaSecret,
       redirectUri: row.metaRedirectUri || fallback.meta.redirectUri,
+      configId: row.metaConfigId || fallback.meta.configId,
     },
     tiktok: {
       clientKey: row.tiktokClientKey || fallback.tiktok.clientKey,
@@ -223,6 +228,7 @@ export async function getAgencySettingsStatus(): Promise<AgencySettingsStatus> {
       creds.dataForSeo.login && creds.dataForSeo.password
     ),
     metaAppId: creds.meta.appId,
+    metaConfigId: creds.meta.configId,
     tiktokClientKey: creds.tiktok.clientKey,
     googleClientId: creds.google.clientId,
     creatomateTemplateId: creds.creatomate.templateId,
@@ -271,6 +277,7 @@ export type UpdateAgencySettingsInput = {
   metaAppId?: string;
   metaAppSecret?: string;
   metaRedirectUri?: string;
+  metaConfigId?: string;
   tiktokClientKey?: string;
   tiktokClientSecret?: string;
   tiktokRedirectUri?: string;
@@ -310,6 +317,9 @@ export async function updateAgencySettings(
   }
   if (input.metaRedirectUri !== undefined) {
     data.metaRedirectUri = input.metaRedirectUri || null;
+  }
+  if (input.metaConfigId !== undefined) {
+    data.metaConfigId = input.metaConfigId || null;
   }
   if (input.tiktokClientKey !== undefined) {
     data.tiktokClientKey = input.tiktokClientKey || null;

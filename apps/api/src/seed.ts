@@ -7,6 +7,7 @@ import { hashPassword } from "./auth";
 
 const DEFAULT_PASSWORD = process.env.SEED_PASSWORD ?? "reachline-demo";
 
+/** Ensure agency login only — no demo clients/posts. */
 async function ensureEditorUser() {
   const passwordHash = await hashPassword(DEFAULT_PASSWORD);
   const user = await db.agencyUser.upsert({
@@ -17,86 +18,20 @@ async function ensureEditorUser() {
       role: "admin",
       passwordHash,
     },
-    update: {
-      passwordHash,
-    },
+    update: {},
   });
   console.log(
-    `Agency login: ${user.email} / ${DEFAULT_PASSWORD} (change after first login)`
+    `Agency login ready: ${user.email} (password unchanged if user already existed)`
   );
   return user;
 }
 
 async function main() {
   await ensureEditorUser();
-
-  const existing = await db.client.findUnique({ where: { slug: "demo-local" } });
-  if (existing) {
-    console.log("Demo client already present:", existing.id);
-    return;
-  }
-
-  const old = await db.client.findUnique({ where: { slug: "demo-bistro" } });
-  if (old) {
-    await db.client.update({
-      where: { id: old.id },
-      data: {
-        name: "Demo Local Services",
-        slug: "demo-local",
-        industry: "Restaurant",
-      },
-    });
-    console.log("Migrated demo client to multi-industry seed:", old.id);
-    return;
-  }
-
-  const client = await db.client.create({
-    data: {
-      name: "Demo Local Services",
-      slug: "demo-local",
-      industry: "Restaurant",
-      locality: "Manchester",
-      websiteUrl: "https://example.com",
-      phone: "+44 161 000 0000",
-      address: "12 Market Street, Manchester",
-      brandKit: {
-        create: {
-          voiceTone: "professional, local, friendly",
-          tagline: "Trusted locally",
-          primaryColor: "#C45C26",
-          secondaryColor: "#1A1A1A",
-          bannedWords: ["cheap", "worst"],
-          bannedClaims: [],
-        },
-      },
-      publishRule: {
-        create: {
-          autoPublishEnabled: true,
-          allowlistedTypes: ["DAILY_SPECIAL", "GENERAL"],
-          forceApprovalTypes: ["PROMO", "BLOG", "PICTURE_AD"],
-          requireApprovalFirstN: 3,
-          minConfidence: 0.7,
-          postingWindows: [
-            { days: [1, 2, 3, 4, 5], startHour: 10, endHour: 20 },
-            { days: [6, 0], startHour: 11, endHour: 18 },
-          ],
-          quietHours: { startHour: 22, endHour: 8 },
-        },
-      },
-      channelConnections: {
-        create: [
-          {
-            platform: "WEBSITE_BLOG",
-            accountLabel: "Website embed",
-            connected: true,
-            metadata: { mode: "embed" },
-          },
-        ],
-      },
-    },
-  });
-
-  console.log("Seeded client", client.name, client.id);
+  const clients = await db.client.count();
+  console.log(
+    `Clients in DB: ${clients}. Seed no longer creates demo clients — add real ones in the UI.`
+  );
 }
 
 main()

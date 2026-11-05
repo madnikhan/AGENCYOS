@@ -15,21 +15,47 @@ export default function NewClientPage() {
     setError(null);
     const fd = new FormData(e.currentTarget);
     const payload = {
-      name: String(fd.get("name") ?? ""),
-      slug: String(fd.get("slug") ?? ""),
-      industry: String(fd.get("industry") ?? ""),
-      locality: String(fd.get("locality") ?? ""),
-      websiteUrl: String(fd.get("websiteUrl") ?? ""),
-      phone: String(fd.get("phone") ?? ""),
-      address: String(fd.get("address") ?? ""),
+      name: String(fd.get("name") ?? "").trim(),
+      slug: String(fd.get("slug") ?? "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "-"),
+      industry: String(fd.get("industry") ?? "").trim(),
+      locality: String(fd.get("locality") ?? "").trim(),
+      websiteUrl: String(fd.get("websiteUrl") ?? "").trim(),
+      phone: String(fd.get("phone") ?? "").trim(),
+      address: String(fd.get("address") ?? "").trim(),
     };
     try {
-      const res = await fetch(`${API_URL}/clients`, { credentials: "include",
+      const res = await fetch(`${API_URL}/clients`, {
+        credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const raw = await res.text();
+        try {
+          const j = JSON.parse(raw) as {
+            error?: { fieldErrors?: Record<string, string[]>; formErrors?: string[] };
+          };
+          const field = j.error?.fieldErrors;
+          const parts = field
+            ? Object.entries(field).flatMap(([k, v]) =>
+                (v ?? []).map((msg) => `${k}: ${msg}`)
+              )
+            : [];
+          const form = j.error?.formErrors ?? [];
+          throw new Error(
+            [...parts, ...form].filter(Boolean).join(" · ") || raw
+          );
+        } catch (parseErr) {
+          if (parseErr instanceof Error && parseErr.message !== raw) {
+            throw parseErr;
+          }
+          throw new Error(raw || "Failed to create client");
+        }
+      }
       const client = await res.json();
       router.push(`/clients/${client.id}`);
     } catch (err) {
@@ -54,10 +80,14 @@ export default function NewClientPage() {
           <input
             name="slug"
             required
-            pattern="[a-z0-9-]+"
+            pattern="[-a-z0-9]+"
+            title="Lowercase letters, numbers, and hyphens only"
             placeholder="city-taxi"
           />
         </label>
+        <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
+          Slug is used in URLs — e.g. <code>city-taxi</code>
+        </p>
         <label>
           Industry
           <input
@@ -82,7 +112,12 @@ export default function NewClientPage() {
         </label>
         <label>
           Website
-          <input name="websiteUrl" type="url" placeholder="https://" />
+          <input
+            name="websiteUrl"
+            type="text"
+            inputMode="url"
+            placeholder="https://example.com"
+          />
         </label>
         <label>
           Phone

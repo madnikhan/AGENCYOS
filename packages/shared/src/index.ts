@@ -35,14 +35,27 @@ export type ContentType = z.infer<typeof ContentTypeSchema>;
 export const AssetTypeSchema = z.enum(["IMAGE", "VIDEO"]);
 export type AssetType = z.infer<typeof AssetTypeSchema>;
 
+const emptyToUndefined = (v: unknown) =>
+  typeof v === "string" && v.trim() === "" ? undefined : v;
+
 export const CreateClientSchema = z.object({
   name: z.string().min(1),
-  slug: z.string().min(1).regex(/^[a-z0-9-]+$/),
-  industry: z.string().optional(),
-  locality: z.string().optional(),
-  websiteUrl: z.string().url().optional().or(z.literal("")),
-  phone: z.string().optional(),
-  address: z.string().optional(),
+  slug: z
+    .string()
+    .min(1)
+    .transform((s) => s.trim().toLowerCase())
+    .pipe(z.string().regex(/^[a-z0-9-]+$/, "Slug: lowercase letters, numbers, hyphens only")),
+  industry: z.preprocess(emptyToUndefined, z.string().optional()),
+  locality: z.preprocess(emptyToUndefined, z.string().optional()),
+  websiteUrl: z.preprocess((v) => {
+    if (typeof v !== "string") return v;
+    const t = v.trim();
+    if (!t) return undefined;
+    if (!/^https?:\/\//i.test(t)) return `https://${t}`;
+    return t;
+  }, z.string().url().optional()),
+  phone: z.preprocess(emptyToUndefined, z.string().optional()),
+  address: z.preprocess(emptyToUndefined, z.string().optional()),
 });
 export type CreateClientInput = z.infer<typeof CreateClientSchema>;
 

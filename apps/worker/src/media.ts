@@ -33,6 +33,14 @@ export async function generateImage(prompt: string): Promise<string> {
   return storeFromUrl(url);
 }
 
+function asciiSafe(s: string, max = 400): string {
+  return s
+    .normalize("NFKD")
+    .replace(/[^\x20-\x7E\n]/g, "")
+    .trim()
+    .slice(0, max);
+}
+
 export async function renderShortVideo(opts: {
   hook: string;
   script: string;
@@ -41,55 +49,69 @@ export async function renderShortVideo(opts: {
   brandName: string;
 }): Promise<string> {
   const creds = await getAgencyCredentials();
-  if (!creds.creatomate.apiKey || !creds.creatomate.templateId) {
+  const apiKey = (creds.creatomate.apiKey || "").trim();
+  const templateId = (creds.creatomate.templateId || "").trim();
+  if (!apiKey || !templateId) {
     return storePlaceholderVideo(opts);
   }
 
-  const createRes = await fetch("https://api.creatomate.com/v1/renders", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${creds.creatomate.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      template_id: creds.creatomate.templateId,
-      modifications: {
-        "Hook": opts.hook,
-        "Script": opts.script,
-        "CTA": opts.cta,
-        "Brand": opts.brandName,
-        "Text-1": opts.onScreenText[0] ?? opts.hook,
-        "Text-2": opts.onScreenText[1] ?? opts.cta,
+  try {
+    const createRes = await fetch("https://api.creatomate.com/v1/renders", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
       },
-    }),
-  });
+      body: JSON.stringify({
+        template_id: templateId,
+        modifications: {
+          Hook: asciiSafe(opts.hook, 120),
+          Script: asciiSafe(opts.script, 1200),
+          CTA: asciiSafe(opts.cta, 80),
+          Brand: asciiSafe(opts.brandName, 80),
+          "Text-1": asciiSafe(opts.onScreenText[0] ?? opts.hook, 120),
+          "Text-2": asciiSafe(opts.onScreenText[1] ?? opts.cta, 120),
+        },
+      }),
+    });
 
-  if (!createRes.ok) {
-    throw new Error(`Creatomate create failed: ${await createRes.text()}`);
-  }
+    if (!createRes.ok) {
+      throw new Error(`Creatomate create failed: ${await createRes.text()}`);
+    }
 
-  const created = (await createRes.json()) as Array<{ id: string; status: string; url?: string }>;
-  const renderId = created[0]?.id;
-  if (!renderId) throw new Error("No Creatomate render id");
-
-  for (let i = 0; i < 40; i++) {
-    await new Promise((r) => setTimeout(r, 3000));
-    const statusRes = await fetch(
-      `https://api.creatomate.com/v1/renders/${renderId}`,
-      { headers: { Authorization: `Bearer ${creds.creatomate.apiKey}` } }
-    );
-    const statusJson = (await statusRes.json()) as {
+    const created = (await createRes.json()) as Array<{
+      id: string;
       status: string;
       url?: string;
-    };
-    if (statusJson.status === "succeeded" && statusJson.url) {
-      return storeFromUrl(statusJson.url);
+    }>;
+    const renderId = created[0]?.id;
+    if (!renderId) throw new Error("No Creatomate render id");
+
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      const statusRes = await fetch(
+        `https://api.creatomate.com/v1/renders/${renderId}`,
+        { headers: { Authorization: `Bearer ${apiKey}` } }
+      );
+      const statusJson = (await statusRes.json()) as {
+        status: string;
+        url?: string;
+      };
+      if (statusJson.status === "succeeded" && statusJson.url) {
+        return storeFromUrl(statusJson.url);
+      }
+      if (statusJson.status === "failed") {
+        throw new Error("Creatomate render failed");
+      }
     }
-    if (statusJson.status === "failed") {
-      throw new Error("Creatomate render failed");
-    }
+    throw new Error("Creatomate render timed out");
+  } catch (err) {
+    console.warn(
+      "[creatomate] falling back to placeholder:",
+      err instanceof Error ? err.message : err
+    );
+    return storePlaceholderVideo(opts);
   }
-  throw new Error("Creatomate render timed out");
 }
 
 async function storePlaceholderImage(prompt: string): Promise<string> {

@@ -66,7 +66,17 @@ export default function PostDetailPage() {
       </p>
       {msg && <div className="panel">{msg}</div>}
       <div className="panel">
-        <p style={{ whiteSpace: "pre-wrap" }}>{post.body}</p>
+        {post.body ? (
+          <p style={{ whiteSpace: "pre-wrap" }}>{post.body}</p>
+        ) : (
+          <p className="muted">
+            {post.status === "DRAFT"
+              ? "Content is still generating — refresh in a few seconds. If this stays empty, open the post after Regenerate or check Settings → Claude."
+              : post.errorMessage
+                ? `Generation failed: ${post.errorMessage}`
+                : "No body yet."}
+          </p>
+        )}
         {!!post.hashtags.length && (
           <p className="muted">{post.hashtags.map((h) => `#${h.replace(/^#/, "")}`).join(" ")}</p>
         )}

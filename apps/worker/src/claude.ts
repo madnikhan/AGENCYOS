@@ -137,7 +137,7 @@ async function complete(
   }
   const content = await buildUserContent(userText, attachments);
   const res = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5-5",
     max_tokens: 4096,
     system,
     messages: [{ role: "user", content }],

@@ -143,6 +143,7 @@ new Worker<GenerateJobData>(
   QUEUE_NAMES.GENERATE,
   async (job) => {
     const { postId, briefId } = job.data;
+    try {
     const post = await db.post.findUnique({
       where: { id: postId },
       include: {
@@ -263,6 +264,18 @@ new Worker<GenerateJobData>(
 
     await applyRuleDecision(postId);
     void briefId;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[generate] post=${postId} failed:`, message);
+      await db.post.update({
+        where: { id: postId },
+        data: {
+          status: "FAILED",
+          errorMessage: message.slice(0, 2000),
+        },
+      });
+      throw err;
+    }
   },
   { connection, concurrency: 2 }
 );
@@ -271,52 +284,74 @@ new Worker<MediaJobData>(
   QUEUE_NAMES.MEDIA,
   async (job) => {
     const { postId, prompt, type } = job.data;
-    const post = await db.post.findUnique({
-      where: { id: postId },
-      include: { client: true },
-    });
-    if (!post) throw new Error("Post not found for media job");
-
-    let url: string;
-    if (type === "VIDEO") {
-      let parsed: {
-        hook?: string;
-        script?: string;
-        onScreenText?: string[];
-        cta?: string;
-      } = {};
-      try {
-        parsed = JSON.parse(prompt);
-      } catch {
-        parsed = { hook: prompt, script: prompt, onScreenText: [prompt], cta: "Order now" };
-      }
-      url = await renderShortVideo({
-        hook: parsed.hook ?? post.title ?? "Watch this",
-        script: parsed.script ?? post.body ?? "",
-        onScreenText: parsed.onScreenText ?? [post.title ?? ""],
-        cta: parsed.cta ?? post.ctaLabel ?? "Order now",
-        brandName: post.client.name,
+    try {
+      const post = await db.post.findUnique({
+        where: { id: postId },
+        include: { client: true },
       });
-    } else {
-      url = await generateImage(prompt);
+      if (!post) throw new Error("Post not found for media job");
+
+      let url: string;
+      if (type === "VIDEO") {
+        let parsed: {
+          hook?: string;
+          script?: string;
+          onScreenText?: string[];
+          cta?: string;
+        } = {};
+        try {
+          parsed = JSON.parse(prompt);
+        } catch {
+          parsed = {
+            hook: prompt,
+            script: prompt,
+            onScreenText: [prompt],
+            cta: "Order now",
+          };
+        }
+        url = await renderShortVideo({
+          hook: parsed.hook ?? post.title ?? "Watch this",
+          script: parsed.script ?? post.body ?? "",
+          onScreenText: parsed.onScreenText ?? [post.title ?? ""],
+          cta: parsed.cta ?? post.ctaLabel ?? "Order now",
+          brandName: post.client.name,
+        });
+      } else {
+        url = await generateImage(prompt);
+      }
+
+      const asset = await db.asset.create({
+        data: {
+          clientId: post.clientId,
+          type: type === "VIDEO" ? "VIDEO" : "IMAGE",
+          url,
+          prompt,
+          mimeType: url.endsWith(".mp4")
+            ? "video/mp4"
+            : url.endsWith(".svg")
+              ? "image/svg+xml"
+              : "image/png",
+        },
+      });
+
+      await db.post.update({
+        where: { id: postId },
+        data: { assetId: asset.id },
+      });
+
+      await applyRuleDecision(postId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[media] post=${postId} failed:`, message);
+      await db.post.update({
+        where: { id: postId },
+        data: {
+          status: "FAILED",
+          errorMessage: message.slice(0, 2000),
+        },
+      });
+      throw err;
     }
-
-    const asset = await db.asset.create({
-      data: {
-        clientId: post.clientId,
-        type: type === "VIDEO" ? "VIDEO" : "IMAGE",
-        url,
-        prompt,
-        mimeType: url.endsWith(".mp4") ? "video/mp4" : url.endsWith(".svg") ? "image/svg+xml" : "image/png",
-      },
-    });
-
-    await db.post.update({
-      where: { id: postId },
-      data: { assetId: asset.id },
-    });
-
-    await applyRuleDecision(postId);
   },
   { connection, concurrency: 1 }
 );

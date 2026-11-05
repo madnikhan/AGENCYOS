@@ -9,6 +9,7 @@ type PageOption = {
   id: string;
   name: string;
   hasInstagram: boolean;
+  igUsername: string | null;
 };
 
 export default function MetaConnectPage() {
@@ -17,8 +18,10 @@ export default function MetaConnectPage() {
   const router = useRouter();
   const pendingId = search.get("pending");
   const [pages, setPages] = useState<PageOption[]>([]);
+  const [grantedScopes, setGrantedScopes] = useState<string[]>([]);
   const [selected, setSelected] = useState<string>("");
   const [connectIg, setConnectIg] = useState(true);
+  const [manualIgUserId, setManualIgUserId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -27,16 +30,26 @@ export default function MetaConnectPage() {
       setError("Missing pending session. Start Connect again from the client.");
       return;
     }
-    void fetch(`${API_URL}/oauth/meta/pending/${pendingId}`, { credentials: "include" })
+    void fetch(`${API_URL}/oauth/meta/pending/${pendingId}`, {
+      credentials: "include",
+    })
       .then(async (r) => {
         if (!r.ok) throw new Error(await r.text());
         return r.json();
       })
-      .then((data: { pages: PageOption[] }) => {
-        setPages(data.pages);
-        if (data.pages[0]) setSelected(data.pages[0].id);
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load pages"));
+      .then(
+        (data: {
+          pages: PageOption[];
+          grantedScopes?: string[];
+        }) => {
+          setPages(data.pages);
+          setGrantedScopes(data.grantedScopes ?? []);
+          if (data.pages[0]) setSelected(data.pages[0].id);
+        }
+      )
+      .catch((e) =>
+        setError(e instanceof Error ? e.message : "Failed to load pages")
+      );
   }, [pendingId]);
 
   async function confirm() {
@@ -44,13 +57,15 @@ export default function MetaConnectPage() {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/oauth/meta/confirm`, { credentials: "include",
+      const res = await fetch(`${API_URL}/oauth/meta/confirm`, {
+        credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           pendingId,
           pageId: selected,
           connectInstagram: connectIg,
+          manualIgUserId: manualIgUserId.trim() || undefined,
         }),
       });
       if (!res.ok) throw new Error(await res.text());
@@ -62,6 +77,11 @@ export default function MetaConnectPage() {
   }
 
   const chosen = pages.find((p) => p.id === selected);
+  const missingIgPerms = ["instagram_basic", "ads_read"].filter(
+    (s) => grantedScopes.length > 0 && !grantedScopes.includes(s)
+  );
+  const canConnectIg =
+    Boolean(chosen?.hasInstagram) || Boolean(manualIgUserId.trim());
 
   return (
     <div>
@@ -70,13 +90,24 @@ export default function MetaConnectPage() {
       </p>
       <h1>Choose Facebook Page</h1>
       <p className="muted">
-        Pick which Page Agency OS should post to for this client. Instagram only
-        appears here when Meta exposes a Professional/Business Instagram account
-        on the Page token (Facebook Settings “Connected Instagram” alone is not
-        enough). You can still save Facebook now and reconnect Instagram later.
+        Pick which Page Agency OS should post to. Instagram only appears when
+        Meta returns a Professional IG account on the user token (Business
+        Manager Page roles also need <code>ads_read</code>).
       </p>
 
-      {error && <div className="panel" style={{ borderColor: "var(--bad)" }}>{error}</div>}
+      {error && (
+        <div className="panel" style={{ borderColor: "var(--bad)" }}>
+          {error}
+        </div>
+      )}
+
+      {missingIgPerms.length > 0 && (
+        <div className="panel" style={{ borderColor: "var(--warn)" }}>
+          <strong>Token is missing:</strong> {missingIgPerms.join(", ")}.
+          Update your Meta Login for Business configuration to include these,
+          then Reconnect Facebook.
+        </div>
+      )}
 
       <div className="panel form-grid">
         {pages.map((p) => (
@@ -102,21 +133,40 @@ export default function MetaConnectPage() {
               <strong>{p.name}</strong>
               <div className="muted">
                 {p.hasInstagram
-                  ? "Instagram business account available"
-                  : "No Instagram business account visible via API"}
+                  ? `Instagram ready${p.igUsername ? ` · @${p.igUsername}` : ""}`
+                  : "No Instagram business account on API yet"}
               </div>
             </span>
           </label>
         ))}
 
-        {chosen?.hasInstagram && (
-          <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+        <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <input
+            type="checkbox"
+            checked={connectIg}
+            onChange={(e) => setConnectIg(e.target.checked)}
+            disabled={!canConnectIg}
+          />
+          Also connect Instagram for this Page
+        </label>
+
+        {!chosen?.hasInstagram && (
+          <label>
+            Instagram business account ID (manual fallback)
             <input
-              type="checkbox"
-              checked={connectIg}
-              onChange={(e) => setConnectIg(e.target.checked)}
+              value={manualIgUserId}
+              onChange={(e) => {
+                setManualIgUserId(e.target.value);
+                if (e.target.value.trim()) setConnectIg(true);
+              }}
+              placeholder="e.g. 1784140…"
             />
-            Also connect Instagram for this Page
+            <span className="muted" style={{ fontSize: "0.85rem" }}>
+              Graph API Explorer →{" "}
+              <code>GET /{"{page-id}"}?fields=instagram_business_account</code>{" "}
+              while logged in as Page admin. Paste the returned{" "}
+              <code>id</code>.
+            </span>
           </label>
         )}
 

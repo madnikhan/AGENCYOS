@@ -23,7 +23,50 @@ type MetaPageOption = {
   name: string;
   accessToken: string;
   igUserId?: string;
+  igUsername?: string;
 };
+
+const META_PAGE_SCOPES = [
+  "public_profile",
+  "pages_show_list",
+  "pages_read_engagement",
+  "pages_manage_posts",
+  "pages_manage_metadata",
+  "business_management",
+  // Required when Page role was granted via Business Manager
+  "ads_read",
+  "instagram_basic",
+  "instagram_content_publish",
+].join(",");
+
+async function resolvePageInstagram(
+  pageId: string,
+  userAccessToken: string,
+  pageAccessToken?: string
+): Promise<{ id?: string; username?: string }> {
+  const tokens = [userAccessToken, pageAccessToken].filter(
+    (t): t is string => Boolean(t)
+  );
+  for (const token of tokens) {
+    try {
+      const igRes = await fetch(
+        `https://graph.facebook.com/v21.0/${pageId}?fields=instagram_business_account{id,username},connected_instagram_account{id,username}&access_token=${encodeURIComponent(token)}`
+      );
+      const igJson = (await igRes.json()) as {
+        instagram_business_account?: { id: string; username?: string };
+        connected_instagram_account?: { id: string; username?: string };
+        error?: { message: string; code?: number };
+      };
+      if (igJson.error) continue;
+      const node =
+        igJson.instagram_business_account || igJson.connected_instagram_account;
+      if (node?.id) return { id: node.id, username: node.username };
+    } catch {
+      /* try next token */
+    }
+  }
+  return {};
+}
 
 channelsRouter.get("/:clientId", async (req, res) => {
   const connections = await db.channelConnection.findMany({
@@ -125,19 +168,7 @@ oauthRouter.get("/meta/start", async (req, res) => {
     url.searchParams.set("config_id", creds.meta.configId);
     url.searchParams.set("override_default_response_type", "true");
   } else {
-    url.searchParams.set(
-      "scope",
-      [
-        "public_profile",
-        "pages_show_list",
-        "pages_read_engagement",
-        "pages_manage_posts",
-        "pages_manage_metadata",
-        "business_management",
-        "instagram_basic",
-        "instagram_content_publish",
-      ].join(",")
-    );
+    url.searchParams.set("scope", META_PAGE_SCOPES);
   }
   res.redirect(url.toString());
 });
@@ -164,19 +195,34 @@ oauthRouter.get("/meta/callback", async (req, res) => {
     return res.status(400).json(tokenJson);
   }
 
-  // Page list first; IG account is often missing on /me/accounts and must be
-  // resolved with each Page access token (instagram_business_account and/or
-  // connected_instagram_account).
+  const userToken = tokenJson.access_token;
+
+  // Inspect granted scopes (helps diagnose missing instagram_basic / ads_read)
+  let grantedScopes: string[] = [];
+  try {
+    const debugRes = await fetch(
+      `https://graph.facebook.com/v21.0/debug_token?input_token=${encodeURIComponent(userToken)}&access_token=${encodeURIComponent(`${creds.meta.appId}|${creds.meta.appSecret}`)}`
+    );
+    const debugJson = (await debugRes.json()) as {
+      data?: { scopes?: string[]; granular_scopes?: Array<{ scope: string }> };
+    };
+    grantedScopes = debugJson.data?.scopes ?? [];
+    if (!grantedScopes.length && debugJson.data?.granular_scopes) {
+      grantedScopes = debugJson.data.granular_scopes.map((g) => g.scope);
+    }
+    console.log("[meta-oauth] granted scopes:", grantedScopes.join(", ") || "(none)");
+  } catch (err) {
+    console.warn("[meta-oauth] debug_token failed", err);
+  }
+
   const pagesRes = await fetch(
-    `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username},connected_instagram_account{id,username}&limit=100&access_token=${tokenJson.access_token}`
+    `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token&limit=100&access_token=${encodeURIComponent(userToken)}`
   );
   const pagesJson = (await pagesRes.json()) as {
     data?: Array<{
       id: string;
       name: string;
       access_token: string;
-      instagram_business_account?: { id: string; username?: string };
-      connected_instagram_account?: { id: string; username?: string };
     }>;
     error?: { message: string };
   };
@@ -187,31 +233,14 @@ oauthRouter.get("/meta/callback", async (req, res) => {
 
   const pages: MetaPageOption[] = [];
   for (const p of pagesJson.data ?? []) {
-    let igUserId =
-      p.instagram_business_account?.id || p.connected_instagram_account?.id;
-
-    if (!igUserId && p.access_token) {
-      try {
-        const igRes = await fetch(
-          `https://graph.facebook.com/v21.0/${p.id}?fields=instagram_business_account{id,username},connected_instagram_account{id,username}&access_token=${p.access_token}`
-        );
-        const igJson = (await igRes.json()) as {
-          instagram_business_account?: { id: string };
-          connected_instagram_account?: { id: string };
-        };
-        igUserId =
-          igJson.instagram_business_account?.id ||
-          igJson.connected_instagram_account?.id;
-      } catch {
-        /* keep page without IG */
-      }
-    }
-
+    // Meta docs: resolve IG with the *user* token (+ ads_read if BM-granted Page role)
+    const ig = await resolvePageInstagram(p.id, userToken, p.access_token);
     pages.push({
       id: p.id,
       name: p.name,
       accessToken: p.access_token,
-      igUserId,
+      igUserId: ig.id,
+      igUsername: ig.username,
     });
   }
 
@@ -223,7 +252,11 @@ oauthRouter.get("/meta/callback", async (req, res) => {
     data: {
       clientId,
       provider: "meta",
-      payload: { pages } as Prisma.InputJsonValue,
+      payload: {
+        pages,
+        grantedScopes,
+        userAccessToken: userToken,
+      } as Prisma.InputJsonValue,
       expiresAt: new Date(Date.now() + 30 * 60 * 1000),
     },
   });
@@ -240,23 +273,29 @@ oauthRouter.get("/meta/pending/:id", async (req, res) => {
   if (!pending || pending.expiresAt < new Date()) {
     return res.status(404).json({ error: "Pending OAuth session expired" });
   }
-  const payload = pending.payload as { pages: MetaPageOption[] };
+  const payload = pending.payload as {
+    pages: MetaPageOption[];
+    grantedScopes?: string[];
+  };
   res.json({
     id: pending.id,
     clientId: pending.clientId,
+    grantedScopes: payload.grantedScopes ?? [],
     pages: payload.pages.map((p) => ({
       id: p.id,
       name: p.name,
       hasInstagram: Boolean(p.igUserId),
+      igUsername: p.igUsername ?? null,
     })),
   });
 });
 
 oauthRouter.post("/meta/confirm", async (req, res) => {
-  const { pendingId, pageId, connectInstagram } = req.body as {
+  const { pendingId, pageId, connectInstagram, manualIgUserId } = req.body as {
     pendingId?: string;
     pageId?: string;
     connectInstagram?: boolean;
+    manualIgUserId?: string;
   };
   if (!pendingId || !pageId) {
     return res.status(400).json({ error: "pendingId and pageId required" });
@@ -267,10 +306,28 @@ oauthRouter.post("/meta/confirm", async (req, res) => {
     return res.status(404).json({ error: "Pending OAuth session expired" });
   }
 
-  const payload = pending.payload as { pages: MetaPageOption[] };
+  const payload = pending.payload as {
+    pages: MetaPageOption[];
+    userAccessToken?: string;
+  };
   const page = payload.pages.find((p) => p.id === pageId);
   if (!page) {
     return res.status(400).json({ error: "Page not found in pending session" });
+  }
+
+  let igUserId = page.igUserId;
+  let igUsername = page.igUsername;
+  const manualId = String(manualIgUserId ?? "").trim();
+  if (manualId) {
+    igUserId = manualId;
+  } else if (!igUserId && payload.userAccessToken) {
+    const again = await resolvePageInstagram(
+      page.id,
+      payload.userAccessToken,
+      page.accessToken
+    );
+    igUserId = again.id;
+    igUsername = again.username ?? igUsername;
   }
 
   const clientId = pending.clientId;
@@ -293,30 +350,47 @@ oauthRouter.post("/meta/confirm", async (req, res) => {
     },
   });
 
-  if (connectInstagram !== false && page.igUserId) {
+  if (connectInstagram !== false && igUserId) {
     await db.channelConnection.upsert({
       where: { clientId_platform: { clientId, platform: "INSTAGRAM" } },
       create: {
         clientId,
         platform: "INSTAGRAM",
-        externalId: page.igUserId,
-        accountLabel: `${page.name} · Instagram`,
+        externalId: igUserId,
+        accountLabel: igUsername
+          ? `@${igUsername}`
+          : `${page.name} · Instagram`,
         accessTokenEnc: encryptToken(page.accessToken, env.tokenEncryptionKey),
         connected: true,
-        metadata: { pageId: page.id },
+        metadata: {
+          pageId: page.id,
+          manual: Boolean(manualId),
+          igUsername: igUsername ?? null,
+        },
       },
       update: {
-        externalId: page.igUserId,
-        accountLabel: `${page.name} · Instagram`,
+        externalId: igUserId,
+        accountLabel: igUsername
+          ? `@${igUsername}`
+          : `${page.name} · Instagram`,
         accessTokenEnc: encryptToken(page.accessToken, env.tokenEncryptionKey),
         connected: true,
-        metadata: { pageId: page.id },
+        metadata: {
+          pageId: page.id,
+          manual: Boolean(manualId),
+          igUsername: igUsername ?? null,
+        },
       },
     });
   }
 
   await db.oAuthPending.delete({ where: { id: pending.id } });
-  res.json({ ok: true, clientId, pageName: page.name });
+  res.json({
+    ok: true,
+    clientId,
+    pageName: page.name,
+    instagramConnected: Boolean(connectInstagram !== false && igUserId),
+  });
 });
 
 oauthRouter.get("/tiktok/start", async (req, res) => {

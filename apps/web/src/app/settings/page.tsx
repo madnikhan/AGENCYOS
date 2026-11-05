@@ -306,6 +306,11 @@ export default function SettingsPage() {
             defaultValue={status?.creatomateTemplateId ?? ""}
           />
         </label>
+        <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
+          Paste the <strong>full</strong> API key from Creatomate → Project
+          settings / API (not the shortened example ending in{" "}
+          <code>…</code>). Truncated keys break video renders.
+        </p>
 
         <button className="btn" type="submit" disabled={saving}>
           {saving ? "Saving…" : "Save settings"}

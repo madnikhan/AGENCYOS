@@ -146,8 +146,15 @@ export async function getAgencyCredentials(): Promise<AgencyCredentials> {
     decryptOpt(row.tiktokClientSecretEnc) || fallback.tiktok.clientSecret;
   const googleSecret =
     decryptOpt(row.googleClientSecretEnc) || fallback.google.clientSecret;
-  const creatomateKey =
+  const creatomateKeyRaw =
     decryptOpt(row.creatomateApiKeyEnc) || fallback.creatomate.apiKey;
+  // Reject truncated keys (often pasted with a trailing … from Creatomate UI docs)
+  const creatomateKey =
+    creatomateKeyRaw &&
+    !/[^\x20-\x7E]/.test(creatomateKeyRaw) &&
+    !creatomateKeyRaw.includes("…")
+      ? creatomateKeyRaw
+      : "";
   const resend = decryptOpt(row.resendApiKeyEnc) || fallback.resendApiKey;
   const dfsLogin =
     decryptOpt(row.dataForSeoLoginEnc) || fallback.dataForSeo.login;
@@ -346,7 +353,14 @@ export async function updateAgencySettings(
     data.googleRedirectUri = input.googleRedirectUri || null;
   }
   if (input.creatomateApiKey !== undefined && input.creatomateApiKey !== "") {
-    data.creatomateApiKeyEnc = encryptOpt(input.creatomateApiKey);
+    const key = input.creatomateApiKey.trim();
+    // Truncated UI copies often end with an ellipsis (…) and break Node fetch headers.
+    if (/[^\x20-\x7E]/.test(key) || key.includes("…") || key.endsWith("...")) {
+      throw new Error(
+        "Creatomate API key looks truncated or contains invalid characters. Paste the full key from Creatomate (Project → API), not a shortened example ending in …"
+      );
+    }
+    data.creatomateApiKeyEnc = encryptOpt(key);
   }
   if (input.creatomateTemplateId !== undefined) {
     data.creatomateTemplateId = input.creatomateTemplateId || null;

@@ -102,12 +102,34 @@ export default function PostDetailPage() {
           </p>
         )}
         {post.asset?.url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={post.asset.url}
-            alt=""
-            style={{ maxWidth: 360, borderRadius: 12, marginTop: 12 }}
-          />
+          <div style={{ marginTop: 12 }}>
+            {post.asset.type === "VIDEO" &&
+            !post.asset.url.endsWith(".svg") ? (
+              <video
+                src={post.asset.url}
+                controls
+                style={{ maxWidth: 360, borderRadius: 12, width: "100%" }}
+              />
+            ) : (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={post.asset.url}
+                  alt=""
+                  style={{ maxWidth: 360, borderRadius: 12 }}
+                />
+                {post.asset.url.endsWith(".svg") &&
+                  post.platform.includes("YOUTUBE") && (
+                    <p className="muted" style={{ marginTop: 8 }}>
+                      Placeholder image only — Creatomate did not return a real
+                      MP4. Check Settings → Creatomate API key (paste the full
+                      key, not a truncated <code>…</code> value), then
+                      Regenerate.
+                    </p>
+                  )}
+              </>
+            )}
+          </div>
         )}
       </div>
       <div className="row" style={{ justifyContent: "flex-start", gap: "0.5rem" }}>

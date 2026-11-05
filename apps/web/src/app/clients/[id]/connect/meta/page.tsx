@@ -70,8 +70,10 @@ export default function MetaConnectPage() {
       </p>
       <h1>Choose Facebook Page</h1>
       <p className="muted">
-        Pick which Page Agency OS should post to for this client. If the Page
-        has Instagram linked, you can connect that too.
+        Pick which Page Agency OS should post to for this client. Instagram only
+        appears here when Meta exposes a Professional/Business Instagram account
+        on the Page token (Facebook Settings “Connected Instagram” alone is not
+        enough). You can still save Facebook now and reconnect Instagram later.
       </p>
 
       {error && <div className="panel" style={{ borderColor: "var(--bad)" }}>{error}</div>}
@@ -101,7 +103,7 @@ export default function MetaConnectPage() {
               <div className="muted">
                 {p.hasInstagram
                   ? "Instagram business account available"
-                  : "No Instagram linked to this Page"}
+                  : "No Instagram business account visible via API"}
               </div>
             </span>
           </label>

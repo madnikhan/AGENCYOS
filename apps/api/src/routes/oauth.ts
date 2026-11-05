@@ -164,24 +164,56 @@ oauthRouter.get("/meta/callback", async (req, res) => {
     return res.status(400).json(tokenJson);
   }
 
+  // Page list first; IG account is often missing on /me/accounts and must be
+  // resolved with each Page access token (instagram_business_account and/or
+  // connected_instagram_account).
   const pagesRes = await fetch(
-    `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,instagram_business_account&access_token=${tokenJson.access_token}`
+    `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username},connected_instagram_account{id,username}&limit=100&access_token=${tokenJson.access_token}`
   );
   const pagesJson = (await pagesRes.json()) as {
     data?: Array<{
       id: string;
       name: string;
       access_token: string;
-      instagram_business_account?: { id: string };
+      instagram_business_account?: { id: string; username?: string };
+      connected_instagram_account?: { id: string; username?: string };
     }>;
+    error?: { message: string };
   };
 
-  const pages: MetaPageOption[] = (pagesJson.data ?? []).map((p) => ({
-    id: p.id,
-    name: p.name,
-    accessToken: p.access_token,
-    igUserId: p.instagram_business_account?.id,
-  }));
+  if (pagesJson.error) {
+    return res.status(400).json(pagesJson);
+  }
+
+  const pages: MetaPageOption[] = [];
+  for (const p of pagesJson.data ?? []) {
+    let igUserId =
+      p.instagram_business_account?.id || p.connected_instagram_account?.id;
+
+    if (!igUserId && p.access_token) {
+      try {
+        const igRes = await fetch(
+          `https://graph.facebook.com/v21.0/${p.id}?fields=instagram_business_account{id,username},connected_instagram_account{id,username}&access_token=${p.access_token}`
+        );
+        const igJson = (await igRes.json()) as {
+          instagram_business_account?: { id: string };
+          connected_instagram_account?: { id: string };
+        };
+        igUserId =
+          igJson.instagram_business_account?.id ||
+          igJson.connected_instagram_account?.id;
+      } catch {
+        /* keep page without IG */
+      }
+    }
+
+    pages.push({
+      id: p.id,
+      name: p.name,
+      accessToken: p.access_token,
+      igUserId,
+    });
+  }
 
   if (!pages.length) {
     return res.status(400).json({ error: "No Facebook Pages found for user" });

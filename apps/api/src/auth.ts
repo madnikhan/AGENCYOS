@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "crypto";
 import type { NextFunction, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { db, type AgencyUser } from "@seo/db";
+import { env } from "./config";
 
 export const SESSION_COOKIE = "reachline_session";
 const SESSION_DAYS = 14;
@@ -47,18 +48,32 @@ export async function resolveSession(
   return session.user;
 }
 
-export function setSessionCookie(res: Response, token: string) {
-  res.cookie(SESSION_COOKIE, token, {
+function sessionCookieOptions() {
+  // Cross-origin dashboard (Vercel) → API (Render/etc) needs SameSite=None; Secure
+  if (env.crossSiteAuth) {
+    return {
+      httpOnly: true,
+      sameSite: "none" as const,
+      secure: true,
+      maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000,
+      path: "/",
+    };
+  }
+  return {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
     maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000,
     path: "/",
-  });
+  };
+}
+
+export function setSessionCookie(res: Response, token: string) {
+  res.cookie(SESSION_COOKIE, token, sessionCookieOptions());
 }
 
 export function clearSessionCookie(res: Response) {
-  res.clearCookie(SESSION_COOKIE, { path: "/" });
+  res.clearCookie(SESSION_COOKIE, sessionCookieOptions());
 }
 
 export async function hashPassword(password: string) {

@@ -39,6 +39,19 @@ const META_PAGE_SCOPES = [
   "instagram_content_publish",
 ].join(",");
 
+/** Required on the Page token to publish feed/photos */
+const META_PAGE_PUBLISH_SCOPES = [
+  "pages_manage_posts",
+  "pages_read_engagement",
+] as const;
+
+function missingMetaScopes(
+  granted: string[],
+  required: readonly string[]
+): string[] {
+  return required.filter((s) => !granted.includes(s));
+}
+
 async function resolvePageInstagram(
   pageId: string,
   userAccessToken: string,
@@ -309,10 +322,38 @@ oauthRouter.post("/meta/confirm", async (req, res) => {
   const payload = pending.payload as {
     pages: MetaPageOption[];
     userAccessToken?: string;
+    grantedScopes?: string[];
   };
   const page = payload.pages.find((p) => p.id === pageId);
   if (!page) {
     return res.status(400).json({ error: "Page not found in pending session" });
+  }
+
+  // Verify Page token can publish (Login for Business config often omits these).
+  let pageScopes: string[] = payload.grantedScopes ?? [];
+  try {
+    const creds = await getAgencyCredentials();
+    const debugRes = await fetch(
+      `https://graph.facebook.com/v21.0/debug_token?input_token=${encodeURIComponent(page.accessToken)}&access_token=${encodeURIComponent(`${creds.meta.appId}|${creds.meta.appSecret}`)}`
+    );
+    const debugJson = (await debugRes.json()) as {
+      data?: { scopes?: string[]; granular_scopes?: Array<{ scope: string }> };
+    };
+    pageScopes = debugJson.data?.scopes ?? [];
+    if (!pageScopes.length && debugJson.data?.granular_scopes) {
+      pageScopes = debugJson.data.granular_scopes.map((g) => g.scope);
+    }
+  } catch (err) {
+    console.warn("[meta-oauth] page token debug failed", err);
+  }
+
+  const missingPublish = missingMetaScopes(pageScopes, META_PAGE_PUBLISH_SCOPES);
+  if (missingPublish.length) {
+    return res.status(400).json({
+      error: `Facebook Page token is missing ${missingPublish.join(", ")}. In Meta Developer Console → Facebook Login for Business → your Configuration, add permissions pages_manage_posts and pages_read_engagement (and ensure Use cases include Manage Pages / Content publishing). Save, then Reconnect Facebook.`,
+      missingScopes: missingPublish,
+      grantedScopes: pageScopes,
+    });
   }
 
   let igUserId = page.igUserId;
@@ -340,13 +381,22 @@ oauthRouter.post("/meta/confirm", async (req, res) => {
       accountLabel: page.name,
       accessTokenEnc: encryptToken(page.accessToken, env.tokenEncryptionKey),
       connected: true,
-      metadata: { selectedViaPicker: true },
+      metadata: {
+        selectedViaPicker: true,
+        grantedScopes: pageScopes,
+        canPublish: true,
+      },
     },
     update: {
       externalId: page.id,
       accountLabel: page.name,
       accessTokenEnc: encryptToken(page.accessToken, env.tokenEncryptionKey),
       connected: true,
+      metadata: {
+        selectedViaPicker: true,
+        grantedScopes: pageScopes,
+        canPublish: true,
+      },
     },
   });
 

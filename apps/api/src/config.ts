@@ -3,12 +3,46 @@ import { config } from "dotenv";
 
 config({ path: path.resolve(__dirname, "../../../.env") });
 
+function parseOrigins(raw: string | undefined, fallback: string): string[] {
+  const list = (raw ?? "")
+    .split(",")
+    .map((s) => s.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+  const base = fallback.replace(/\/$/, "");
+  return [...new Set([base, ...list])];
+}
+
+const webUrl = (process.env.WEB_URL ?? "http://localhost:3000").replace(
+  /\/$/,
+  ""
+);
+const apiUrl = (process.env.API_URL ?? "http://localhost:4000").replace(
+  /\/$/,
+  ""
+);
+const corsOrigins = parseOrigins(process.env.CORS_ORIGINS, webUrl);
+
+function hostsDiffer(a: string, b: string): boolean {
+  try {
+    return new URL(a).host !== new URL(b).host;
+  } catch {
+    return true;
+  }
+}
+
+/** Cross-site cookies needed when the dashboard origin ≠ API origin (e.g. Vercel → Render). */
+const crossSiteAuth =
+  process.env.CROSS_SITE_AUTH === "true" ||
+  (process.env.CROSS_SITE_AUTH !== "false" && hostsDiffer(webUrl, apiUrl));
+
 export const env = {
   port: Number(process.env.API_PORT ?? 4000),
   databaseUrl: process.env.DATABASE_URL ?? "",
   redisUrl: process.env.REDIS_URL ?? "redis://localhost:6379",
-  webUrl: process.env.WEB_URL ?? "http://localhost:3000",
-  apiUrl: process.env.API_URL ?? "http://localhost:4000",
+  webUrl,
+  apiUrl,
+  corsOrigins,
+  crossSiteAuth,
   tokenEncryptionKey:
     process.env.TOKEN_ENCRYPTION_KEY ?? "change-me-to-a-32-byte-secret-key!!",
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",

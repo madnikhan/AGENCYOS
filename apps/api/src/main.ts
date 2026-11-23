@@ -12,11 +12,21 @@ import { publicRouter } from "./routes/public";
 import { settingsRouter } from "./routes/settings";
 import { analyticsRouter } from "./routes/analytics";
 import { seoRouter } from "./routes/seo";
+import { creatomateRouter } from "./routes/creatomate";
 
 const app = express();
 app.use(
   cors({
-    origin: env.webUrl,
+    origin(origin, callback) {
+      // Non-browser / same-origin tools may omit Origin
+      if (!origin) return callback(null, true);
+      const normalized = origin.replace(/\/$/, "");
+      if (env.corsOrigins.includes(normalized)) {
+        return callback(null, true);
+      }
+      console.warn(`[cors] blocked origin: ${origin}`);
+      return callback(null, false);
+    },
     credentials: true,
   })
 );
@@ -40,6 +50,7 @@ app.use("/oauth", oauthRouter);
 app.use("/settings", settingsRouter);
 app.use("/analytics", analyticsRouter);
 app.use("/seo", seoRouter);
+app.use("/creatomate", creatomateRouter);
 app.use("/public", publicRouter);
 
 app.use(

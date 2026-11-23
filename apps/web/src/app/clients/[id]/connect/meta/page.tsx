@@ -68,7 +68,14 @@ export default function MetaConnectPage() {
           manualIgUserId: manualIgUserId.trim() || undefined,
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(
+          (body && typeof body === "object" && "error" in body
+            ? String((body as { error: string }).error)
+            : null) || "Failed to save Meta connection"
+        );
+      }
       router.push(`/clients/${params.id}?connected=meta`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed");
@@ -80,6 +87,10 @@ export default function MetaConnectPage() {
   const missingIgPerms = ["instagram_basic", "ads_read"].filter(
     (s) => grantedScopes.length > 0 && !grantedScopes.includes(s)
   );
+  const missingPublishPerms = [
+    "pages_manage_posts",
+    "pages_read_engagement",
+  ].filter((s) => grantedScopes.length > 0 && !grantedScopes.includes(s));
   const canConnectIg =
     Boolean(chosen?.hasInstagram) || Boolean(manualIgUserId.trim());
 
@@ -98,6 +109,17 @@ export default function MetaConnectPage() {
       {error && (
         <div className="panel" style={{ borderColor: "var(--bad)" }}>
           {error}
+        </div>
+      )}
+
+      {missingPublishPerms.length > 0 && (
+        <div className="panel" style={{ borderColor: "var(--bad)" }}>
+          <strong>Cannot publish to Facebook yet.</strong> This login is
+          missing <code>{missingPublishPerms.join(", ")}</code>. In Meta →
+          Facebook Login for Business → your Configuration, add those
+          permissions (Pages / content publishing use case), save, then{" "}
+          <Link href={`/clients/${params.id}`}>Reconnect Facebook</Link>.
+          Saving is blocked until Meta grants them.
         </div>
       )}
 
@@ -173,10 +195,14 @@ export default function MetaConnectPage() {
         <button
           className="btn"
           type="button"
-          disabled={!selected || saving}
+          disabled={!selected || saving || missingPublishPerms.length > 0}
           onClick={() => void confirm()}
         >
-          {saving ? "Saving…" : "Save connection"}
+          {saving
+            ? "Saving…"
+            : missingPublishPerms.length > 0
+              ? "Fix Meta permissions first"
+              : "Save connection"}
         </button>
       </div>
     </div>

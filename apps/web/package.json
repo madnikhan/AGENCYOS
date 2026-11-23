@@ -9,6 +9,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@creatomate/preview": "^1.6.1",
     "@seo/shared": "workspace:*",
     "next": "^15.1.2",
     "react": "^19.0.0",

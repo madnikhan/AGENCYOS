@@ -11,6 +11,8 @@ type SettingsStatus = {
   tiktokConfigured: boolean;
   youtubeConfigured: boolean;
   creatomateConfigured: boolean;
+  creatomatePublicTokenConfigured?: boolean;
+  creatomatePublicToken?: string;
   dataForSeoConfigured: boolean;
   metaAppId: string;
   metaConfigId: string;
@@ -28,6 +30,7 @@ export default function SettingsPage() {
   const [status, setStatus] = useState<SettingsStatus | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [formKey, setFormKey] = useState(0);
 
   async function load() {
     const res = await fetch(`${API_URL}/settings`, { credentials: "include" });
@@ -40,24 +43,38 @@ export default function SettingsPage() {
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // Capture before await — React nulls e.currentTarget after the event handler yields
+    const form = e.currentTarget;
     setSaving(true);
     setMessage(null);
-    const fd = new FormData(e.currentTarget);
+    const fd = new FormData(form);
     const payload: Record<string, string> = {};
     for (const [k, v] of fd.entries()) {
       const s = String(v).trim();
       if (s) payload[k] = s;
     }
     try {
-      const res = await fetch(`${API_URL}/settings`, { credentials: "include",
+      const res = await fetch(`${API_URL}/settings`, {
+        credentials: "include",
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(await res.text());
-      setStatus(await res.json());
+      if (!res.ok) {
+        const body = await res.text();
+        let msg = body;
+        try {
+          const j = JSON.parse(body) as { error?: string };
+          if (j.error) msg = j.error;
+        } catch {
+          /* keep raw */
+        }
+        throw new Error(msg || `Save failed (${res.status})`);
+      }
+      const next = (await res.json()) as SettingsStatus;
+      setStatus(next);
+      setFormKey((k) => k + 1);
       setMessage("Settings saved. Secrets are encrypted in the database.");
-      e.currentTarget.reset();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -117,6 +134,14 @@ export default function SettingsPage() {
             <div className="channel-card">
               <strong>Creatomate video</strong>
               <div>{badge(status.creatomateConfigured)}</div>
+              <div style={{ marginTop: 4 }}>
+                {badge(
+                  Boolean(status.creatomatePublicTokenConfigured),
+                  status.creatomatePublicTokenConfigured
+                    ? "preview token"
+                    : undefined
+                )}
+              </div>
             </div>
             <div className="channel-card">
               <strong>DataForSEO</strong>
@@ -131,7 +156,11 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <form className="panel form-grid" onSubmit={onSubmit}>
+      <form
+        key={formKey}
+        className="panel form-grid"
+        onSubmit={onSubmit}
+      >
         <h2 style={{ margin: 0 }}>Claude</h2>
         <label>
           Anthropic API key
@@ -184,11 +213,16 @@ export default function SettingsPage() {
           />
         </label>
         <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
-          Required for new Meta apps. Create a configuration with Pages +
-          Instagram assets/permissions, then paste the Configuration ID here.
-          Also whitelist{" "}
-          <code>http://localhost:4000/oauth/meta/callback</code> under Valid
-          OAuth Redirect URIs.
+          Required for new Meta apps. Create a Login for Business configuration
+          whose permissions include at least{" "}
+          <code>pages_show_list</code>, <code>pages_manage_posts</code>,{" "}
+          <code>pages_read_engagement</code>, and (for IG){" "}
+          <code>instagram_basic</code> + <code>instagram_content_publish</code>{" "}
+          + <code>ads_read</code>. Paste the Configuration ID here. Also
+          whitelist <code>http://localhost:4000/oauth/meta/callback</code> under
+          Valid OAuth Redirect URIs. While the app is in Development mode, only
+          Meta app Admins/Developers/Testers can grant advanced permissions —
+          add yourself as a tester if posts fail with (#200).
         </p>
 
         <h2 style={{ margin: "1rem 0 0" }}>TikTok</h2>
@@ -300,16 +334,31 @@ export default function SettingsPage() {
           <input name="creatomateApiKey" type="password" autoComplete="off" />
         </label>
         <label>
-          Creatomate template ID
+          Creatomate template ID (agency default)
           <input
             name="creatomateTemplateId"
             defaultValue={status?.creatomateTemplateId ?? ""}
           />
         </label>
+        <label>
+          Creatomate public token (Preview SDK)
+          <input
+            name="creatomatePublicToken"
+            defaultValue={status?.creatomatePublicToken ?? ""}
+            placeholder={
+              status?.creatomatePublicTokenConfigured
+                ? "Leave blank to keep"
+                : "From Creatomate → Project settings"
+            }
+            autoComplete="off"
+          />
+        </label>
         <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
           Paste the <strong>full</strong> API key from Creatomate → Project
           settings / API (not the shortened example ending in{" "}
-          <code>…</code>). Truncated keys break video renders.
+          <code>…</code>). Truncated keys break video renders. The{" "}
+          <strong>public token</strong> powers the in-app template gallery
+          preview (safe for the dashboard); keep the API key secret.
         </p>
 
         <button className="btn" type="submit" disabled={saving}>

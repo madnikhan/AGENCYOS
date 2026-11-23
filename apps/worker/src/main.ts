@@ -216,27 +216,140 @@ new Worker<GenerateJobData>(
         type: "IMAGE",
       });
       return;
-    } else if (platform === "TIKTOK" || platform === "YOUTUBE_SHORTS") {
+    } else if (
+      platform === "TIKTOK" ||
+      platform === "YOUTUBE_SHORTS" ||
+      ((platform === "INSTAGRAM" || platform === "FACEBOOK") &&
+        (post.brief.contentType === "SHORT_VIDEO" ||
+          post.brief.platforms.some(
+            (p) => p === "YOUTUBE_SHORTS" || p === "TIKTOK"
+          )))
+    ) {
+      // Reuse sibling Short MP4 when another platform on this brief already rendered
+      if (post.briefId) {
+        const sibling = await db.post.findFirst({
+          where: {
+            briefId: post.briefId,
+            id: { not: postId },
+            contentType: "SHORT_VIDEO",
+            assetId: { not: null },
+            asset: { type: "VIDEO" },
+          },
+          include: { asset: true },
+        });
+        if (sibling?.assetId && sibling.asset?.mimeType === "video/mp4") {
+          await db.post.update({
+            where: { id: postId },
+            data: {
+              title: sibling.title,
+              body: sibling.body,
+              metaTitle: sibling.metaTitle,
+              metaDescription: sibling.metaDescription,
+              hashtags: sibling.hashtags,
+              ctaLabel: sibling.ctaLabel,
+              confidence: sibling.confidence,
+              contentType: "SHORT_VIDEO",
+              assetId: sibling.assetId,
+            },
+          });
+          await applyRuleDecision(postId);
+          return;
+        }
+      }
+
       const short = await generateShortScript(brand, brief, attachments);
+      const tagify = (raw: string) =>
+        raw
+          .split(/[,/|]+/)
+          .map((s) => s.trim().replace(/\s+/g, ""))
+          .filter(Boolean);
+      const industryTags = tagify(brand.industry ?? "local").slice(0, 4);
+      const localityTags = tagify(brand.locality ?? "local").slice(0, 4);
       await db.post.update({
         where: { id: postId },
         data: {
           title: short.hook,
-          body: `${short.script}\n\n${short.cta}`,
-          hashtags: [
-            "Shorts",
-            (brand.industry ?? "local").replace(/\s+/g, ""),
-            brand.locality?.replace(/\s+/g, "") ?? "local",
-          ].filter(Boolean),
+          body: short.caption,
+          metaTitle: short.hook,
+          metaDescription: short.punchline,
+          hashtags: ["Shorts", ...industryTags, ...localityTags].filter(
+            Boolean
+          ),
           ctaLabel: short.cta,
           confidence: short.confidence,
           contentType: "SHORT_VIDEO",
         },
       });
+
+      let shareAssetWithPostIds: string[] | undefined;
+      if (post.briefId) {
+        const siblings = await db.post.findMany({
+          where: {
+            briefId: post.briefId,
+            id: { not: postId },
+            platform: {
+              in: ["YOUTUBE_SHORTS", "TIKTOK", "INSTAGRAM", "FACEBOOK"],
+            },
+            assetId: null,
+          },
+          select: { id: true, platform: true },
+        });
+        const briefPlatforms = post.brief.platforms;
+        const wantsVideo = (p: string) =>
+          p === "YOUTUBE_SHORTS" ||
+          p === "TIKTOK" ||
+          ((p === "INSTAGRAM" || p === "FACEBOOK") &&
+            (post.brief!.contentType === "SHORT_VIDEO" ||
+              briefPlatforms.some(
+                (x) => x === "YOUTUBE_SHORTS" || x === "TIKTOK"
+              )));
+        shareAssetWithPostIds = siblings
+          .filter((s) => wantsVideo(s.platform))
+          .map((s) => s.id);
+      }
+
+      const briefVideo = (post.brief.videoSettings ?? null) as {
+        templateId?: string;
+        presetId?: string;
+        fieldMap?: Record<string, string>;
+        modifications?: Record<string, string>;
+      } | null;
+
+      const templateId =
+        briefVideo?.templateId || brandKit.creatomateTemplateId || undefined;
+      const fieldMap =
+        briefVideo?.fieldMap ||
+        (brandKit.creatomateFieldMap as Record<string, string> | null) ||
+        undefined;
+      const studioMods = briefVideo?.modifications;
+
       await mediaQueue.add("render-media", {
         postId,
-        prompt: JSON.stringify(short),
+        prompt: JSON.stringify({
+          ...short,
+          _brand: {
+            logoUrl:
+              studioMods?.["Logo.source"] ||
+              studioMods?.Logo ||
+              brandKit.logoUrl,
+            primaryColor:
+              studioMods?.["Fill-1"] || brandKit.primaryColor,
+            secondaryColor:
+              studioMods?.["Fill-2"] || brandKit.secondaryColor,
+            headingFont: brandKit.headingFont,
+            bodyFont: brandKit.bodyFont,
+          },
+          _template: {
+            templateId,
+            presetId: briefVideo?.presetId || brandKit.videoTemplatePreset,
+            fieldMap,
+          },
+          _modifications: studioMods,
+        }),
         type: "VIDEO",
+        templateId,
+        modifications: studioMods,
+        shareAssetWithPostIds,
       });
       return;
     } else {
@@ -283,11 +396,12 @@ new Worker<GenerateJobData>(
 new Worker<MediaJobData>(
   QUEUE_NAMES.MEDIA,
   async (job) => {
-    const { postId, prompt, type } = job.data;
+    const { postId, prompt, type, shareAssetWithPostIds, modifications } =
+      job.data;
     try {
       const post = await db.post.findUnique({
         where: { id: postId },
-        include: { client: true },
+        include: { client: { include: { brandKit: true } } },
       });
       if (!post) throw new Error("Post not found for media job");
 
@@ -295,26 +409,93 @@ new Worker<MediaJobData>(
       if (type === "VIDEO") {
         let parsed: {
           hook?: string;
+          punchline?: string;
+          caption?: string;
           script?: string;
           onScreenText?: string[];
           cta?: string;
+          visualPrompt?: string;
+          _brand?: {
+            logoUrl?: string | null;
+            primaryColor?: string | null;
+            secondaryColor?: string | null;
+            headingFont?: string | null;
+            bodyFont?: string | null;
+          };
+          _template?: {
+            templateId?: string | null;
+            presetId?: string | null;
+            fieldMap?: Record<string, string> | null;
+          };
+          _modifications?: Record<string, string>;
         } = {};
         try {
           parsed = JSON.parse(prompt);
         } catch {
           parsed = {
             hook: prompt,
-            script: prompt,
-            onScreenText: [prompt],
-            cta: "Order now",
+            punchline: post.metaDescription ?? prompt,
+            cta: "Learn more",
           };
         }
+        const hook = parsed.hook ?? post.title ?? "Watch this";
+        const punchline =
+          parsed.punchline ??
+          parsed.onScreenText?.[1] ??
+          post.metaDescription ??
+          post.ctaLabel ??
+          "Learn more";
+
+        let videoSourceUrl: string | undefined;
+        const visualPrompt = parsed.visualPrompt?.trim();
+        if (visualPrompt) {
+          try {
+            videoSourceUrl = await generateImage(visualPrompt, {
+              imageSize: "portrait_16_9",
+              preferRemoteUrl: true,
+            });
+            if (
+              videoSourceUrl.endsWith(".svg") ||
+              videoSourceUrl.includes("placeholder")
+            ) {
+              videoSourceUrl = undefined;
+            }
+          } catch (err) {
+            console.warn(
+              "[media] fal still for Short failed, using template default video:",
+              err instanceof Error ? err.message : err
+            );
+          }
+        }
+
+        const kit = post.client.brandKit;
+        const extraMods =
+          modifications || parsed._modifications || undefined;
         url = await renderShortVideo({
-          hook: parsed.hook ?? post.title ?? "Watch this",
-          script: parsed.script ?? post.body ?? "",
-          onScreenText: parsed.onScreenText ?? [post.title ?? ""],
-          cta: parsed.cta ?? post.ctaLabel ?? "Order now",
+          hook,
+          punchline,
+          cta: parsed.cta ?? post.ctaLabel ?? "Learn more",
           brandName: post.client.name,
+          videoSourceUrl,
+          brand: parsed._brand ?? {
+            logoUrl: kit?.logoUrl,
+            primaryColor: kit?.primaryColor,
+            secondaryColor: kit?.secondaryColor,
+            headingFont: kit?.headingFont,
+            bodyFont: kit?.bodyFont,
+          },
+          template: {
+            templateId:
+              job.data.templateId ||
+              parsed._template?.templateId ||
+              kit?.creatomateTemplateId,
+            presetId: parsed._template?.presetId || kit?.videoTemplatePreset,
+            fieldMap:
+              parsed._template?.fieldMap ||
+              ((kit?.creatomateFieldMap as Record<string, string> | null) ??
+                null),
+          },
+          extraModifications: extraMods,
         });
       } else {
         url = await generateImage(prompt);
@@ -338,6 +519,26 @@ new Worker<MediaJobData>(
         where: { id: postId },
         data: { assetId: asset.id },
       });
+
+      if (shareAssetWithPostIds?.length) {
+        for (const siblingId of shareAssetWithPostIds) {
+          await db.post.update({
+            where: { id: siblingId },
+            data: {
+              assetId: asset.id,
+              contentType: "SHORT_VIDEO",
+              title: post.title,
+              body: post.body,
+              metaTitle: post.metaTitle,
+              metaDescription: post.metaDescription,
+              hashtags: post.hashtags,
+              ctaLabel: post.ctaLabel,
+              confidence: post.confidence,
+            },
+          });
+          await applyRuleDecision(siblingId);
+        }
+      }
 
       await applyRuleDecision(postId);
     } catch (err) {
@@ -397,23 +598,33 @@ new Worker<PublishJobData>(
           if (!connectionRow?.connected || !connectionRow.externalId) {
             throw new Error("Facebook channel not connected");
           }
+          const fbIsVideo =
+            post.contentType === "SHORT_VIDEO" ||
+            post.asset?.mimeType === "video/mp4" ||
+            post.asset?.url?.endsWith(".mp4");
           result = await publishFacebook({
             accessTokenEnc: connectionRow.accessTokenEnc!,
             pageId: connectionRow.externalId,
             message,
-            imageUrl: post.asset?.url,
+            imageUrl: fbIsVideo ? null : post.asset?.url,
+            videoUrl: fbIsVideo ? post.asset?.url : null,
           });
           break;
         }
         case "INSTAGRAM": {
           if (!connectionRow?.connected || !connectionRow.externalId || !post.asset?.url) {
-            throw new Error("Instagram requires connected account and image asset");
+            throw new Error("Instagram requires connected account and media asset");
           }
+          const igIsVideo =
+            post.contentType === "SHORT_VIDEO" ||
+            post.asset.mimeType === "video/mp4" ||
+            post.asset.url.endsWith(".mp4");
           result = await publishInstagram({
             accessTokenEnc: connectionRow.accessTokenEnc!,
             igUserId: connectionRow.externalId,
             caption: message,
-            imageUrl: post.asset.url,
+            imageUrl: igIsVideo ? undefined : post.asset.url,
+            videoUrl: igIsVideo ? post.asset.url : undefined,
           });
           break;
         }
@@ -464,6 +675,7 @@ new Worker<PublishJobData>(
           result = await publishYouTubeShort({
             accessTokenEnc: connectionRow.accessTokenEnc!,
             refreshTokenEnc: connectionRow.refreshTokenEnc,
+            connectionClientId: post.clientId,
             title: post.title ?? "Short",
             description: post.body ?? "",
             videoUrl: post.asset.url,

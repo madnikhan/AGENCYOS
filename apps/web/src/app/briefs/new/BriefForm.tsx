@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { API_URL, formatApiError } from "@/lib/api";
+import CreatomateStudio, {
+  type StudioResult,
+} from "@/components/CreatomateStudio";
+import type { BriefVideoSettings } from "@seo/shared";
 
 const PLATFORMS = [
   "FACEBOOK",
@@ -28,7 +32,17 @@ const ACCEPT =
 const MAX_FILES = 5;
 const MAX_BYTES = 10 * 1024 * 1024;
 
-type Client = { id: string; name: string };
+type Client = {
+  id: string;
+  name: string;
+  brandKit?: {
+    logoUrl?: string | null;
+    primaryColor?: string | null;
+    secondaryColor?: string | null;
+    creatomateTemplateId?: string | null;
+    ctaDefaults?: { book?: string } | null;
+  } | null;
+};
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -48,12 +62,30 @@ export default function NewBriefPage() {
   const [clientId, setClientId] = useState(search.get("clientId") ?? "");
   const [seoKeywords, setSeoKeywords] = useState("");
   const [seoNotes, setSeoNotes] = useState("");
+  const [studioOpen, setStudioOpen] = useState(false);
+  const [videoSettings, setVideoSettings] =
+    useState<BriefVideoSettings | null>(null);
+  const [publicToken, setPublicToken] = useState<string | null>(null);
+
+  const wantsShortVideo =
+    platforms.includes("YOUTUBE_SHORTS") ||
+    platforms.includes("TIKTOK") ||
+    platforms.includes("INSTAGRAM") ||
+    platforms.includes("FACEBOOK");
+
+  const selectedClient = clients.find((c) => c.id === clientId);
 
   useEffect(() => {
     void fetch(`${API_URL}/clients`, { credentials: "include" })
       .then((r) => r.json())
       .then(setClients)
       .catch(() => setClients([]));
+    void fetch(`${API_URL}/settings`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((s: { creatomatePublicToken?: string }) =>
+        setPublicToken(s.creatomatePublicToken ?? null)
+      )
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -140,6 +172,9 @@ export default function NewBriefPage() {
     }
     for (const file of files) {
       body.append("attachments", file);
+    }
+    if (videoSettings) {
+      body.append("videoSettings", JSON.stringify(videoSettings));
     }
 
     try {
@@ -235,6 +270,35 @@ export default function NewBriefPage() {
             ))}
           </div>
         </div>
+        {wantsShortVideo && (
+          <div>
+            <div className="muted" style={{ marginBottom: "0.35rem" }}>
+              Video template (Shorts / Reels)
+            </div>
+            <p className="muted" style={{ marginTop: 0, fontSize: "0.9rem" }}>
+              {videoSettings?.templateId
+                ? `Override: ${videoSettings.templateId.slice(0, 12)}…`
+                : "Using client Brand Kit / agency default"}
+            </p>
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={() => setStudioOpen(true)}
+            >
+              Choose template in Studio
+            </button>
+            {videoSettings && (
+              <button
+                type="button"
+                className="btn secondary"
+                style={{ marginLeft: 8 }}
+                onClick={() => setVideoSettings(null)}
+              >
+                Clear override
+              </button>
+            )}
+          </div>
+        )}
         <label>
           Notes for Claude
           <textarea
@@ -285,6 +349,32 @@ export default function NewBriefPage() {
           {saving ? "Queuing…" : "Generate drafts"}
         </button>
       </form>
+
+      <CreatomateStudio
+        open={studioOpen}
+        onClose={() => setStudioOpen(false)}
+        onApply={(r: StudioResult) => {
+          setVideoSettings({
+            templateId: r.templateId,
+            presetId: r.presetId,
+            fieldMap: r.fieldMap,
+            modifications: r.modifications,
+          });
+        }}
+        publicToken={publicToken}
+        initialTemplateId={
+          videoSettings?.templateId ||
+          selectedClient?.brandKit?.creatomateTemplateId
+        }
+        initialForm={{
+          logoUrl: selectedClient?.brandKit?.logoUrl ?? "",
+          primaryColor: selectedClient?.brandKit?.primaryColor ?? "#C45C26",
+          secondaryColor:
+            selectedClient?.brandKit?.secondaryColor ?? "#1A1A1A",
+          cta: selectedClient?.brandKit?.ctaDefaults?.book ?? "Book now",
+        }}
+        title="Shorts template for this brief"
+      />
     </div>
   );
 }

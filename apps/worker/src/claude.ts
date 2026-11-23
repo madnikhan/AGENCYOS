@@ -232,9 +232,17 @@ export async function generateShortScript(
   const client = await getClient();
   if (!client) return mockShort(brand, brief);
   const text = await complete(
-    `You write short-form vertical video scripts for TikTok and YouTube Shorts for local businesses (any industry). Hook in first 2 seconds.${ATTACHMENT_SYSTEM_HINT}`,
+    `You write YouTube Shorts / TikTok promo copy for a Creatomate "Quick Promo" template.
+The template only shows TWO on-screen text lines over a background clip — do NOT write film shot lists, VISUAL/VO boards, or multi-scene scripts.
+Stay faithful to the brief title, offer, notes, keywords, price, and discount. Use the client name and localities. Do not invent unrelated offers.${ATTACHMENT_SYSTEM_HINT}`,
     `${brandPrompt(brand, brief)}
-Schema: {"hook": string, "script": string, "onScreenText": string[], "cta": string, "confidence": number}`,
+Rules:
+- hook: Text-1 on screen, max ~8 words, punchy
+- punchline: Text-2 on screen, must include the offer/price from the brief when present
+- caption: 2–4 short sentences for the YouTube description (spoken style), matching the brief — no [0-2s] VISUAL blocks
+- cta: short button text matching the brief CTA
+- visualPrompt: one sentence for a vertical background still (product/offer vibe, no text overlays)
+Schema: {"hook": string, "punchline": string, "caption": string, "cta": string, "visualPrompt": string, "confidence": number}`,
     attachments
   );
   return GeneratedShortScriptSchema.parse(extractJson(text));
@@ -283,11 +291,13 @@ function mockAd(brand: BrandContext, brief: BriefContext) {
 }
 
 function mockShort(brand: BrandContext, brief: BriefContext) {
+  const offer = brief.offer ?? brief.title;
   return GeneratedShortScriptSchema.parse({
-    hook: `Looking for ${brand.industry ?? "help"} in ${brand.locality ?? "town"}?`,
-    script: `${brief.offer ?? brief.title} at ${brand.name}. ${brand.ctaLabel}!`,
-    onScreenText: [brief.title, brand.ctaLabel],
+    hook: offer.slice(0, 48),
+    punchline: `${offer} · ${brand.name}`.slice(0, 60),
+    caption: `${offer} from ${brand.name}${brand.locality ? ` — ${brand.locality}` : ""}. ${brand.ctaLabel}.`,
     cta: brand.ctaLabel,
+    visualPrompt: `Vertical marketing still for a ${brand.industry ?? "local"} business promoting ${offer}, clean modern look, no text`,
     confidence: 0.64,
   });
 }

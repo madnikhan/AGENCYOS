@@ -45,6 +45,7 @@ export type AgencyCredentials = {
   creatomate: {
     apiKey: string;
     templateId: string;
+    publicToken: string;
   };
   dataForSeo: {
     login: string;
@@ -62,6 +63,9 @@ export type AgencySettingsStatus = {
   tiktokConfigured: boolean;
   youtubeConfigured: boolean;
   creatomateConfigured: boolean;
+  creatomatePublicTokenConfigured: boolean;
+  /** Safe to send to browser for Preview SDK */
+  creatomatePublicToken: string;
   dataForSeoConfigured: boolean;
   metaAppId: string;
   metaConfigId: string;
@@ -113,6 +117,7 @@ function envFallback(): AgencyCredentials {
     creatomate: {
       apiKey: process.env.CREATOMATE_API_KEY ?? "",
       templateId: process.env.CREATOMATE_TEMPLATE_ID ?? "",
+      publicToken: process.env.CREATOMATE_PUBLIC_TOKEN ?? "",
     },
     dataForSeo: {
       login: process.env.DATAFORSEO_LOGIN ?? "",
@@ -183,6 +188,8 @@ export async function getAgencyCredentials(): Promise<AgencyCredentials> {
     creatomate: {
       apiKey: creatomateKey,
       templateId: row.creatomateTemplateId || fallback.creatomate.templateId,
+      publicToken:
+        row.creatomatePublicToken || fallback.creatomate.publicToken,
     },
     dataForSeo: {
       login: dfsLogin,
@@ -231,6 +238,8 @@ export async function getAgencySettingsStatus(): Promise<AgencySettingsStatus> {
     creatomateConfigured: Boolean(
       creds.creatomate.apiKey && creds.creatomate.templateId
     ),
+    creatomatePublicTokenConfigured: Boolean(creds.creatomate.publicToken),
+    creatomatePublicToken: creds.creatomate.publicToken,
     dataForSeoConfigured: Boolean(
       creds.dataForSeo.login && creds.dataForSeo.password
     ),
@@ -293,6 +302,7 @@ export type UpdateAgencySettingsInput = {
   googleRedirectUri?: string;
   creatomateApiKey?: string;
   creatomateTemplateId?: string;
+  creatomatePublicToken?: string;
   dataForSeoLogin?: string;
   dataForSeoPassword?: string;
   slackWebhookUrl?: string;
@@ -364,6 +374,9 @@ export async function updateAgencySettings(
   }
   if (input.creatomateTemplateId !== undefined) {
     data.creatomateTemplateId = input.creatomateTemplateId || null;
+  }
+  if (input.creatomatePublicToken !== undefined) {
+    data.creatomatePublicToken = input.creatomatePublicToken.trim() || null;
   }
   if (input.dataForSeoLogin !== undefined && input.dataForSeoLogin !== "") {
     data.dataForSeoLoginEnc = encryptOpt(input.dataForSeoLogin);

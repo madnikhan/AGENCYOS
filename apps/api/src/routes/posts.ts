@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import { db } from "@seo/db";
+import { db, Prisma } from "@seo/db";
 import {
   ApprovePostSchema,
   CreateBriefSchema,
@@ -49,6 +49,18 @@ function parseBriefBody(body: Record<string, unknown>) {
     scheduledAt = Number.isNaN(d.getTime()) ? scheduledAt : d.toISOString();
   }
 
+  let videoSettings: unknown = body.videoSettings;
+  if (typeof videoSettings === "string" && videoSettings.trim()) {
+    try {
+      videoSettings = JSON.parse(videoSettings);
+    } catch {
+      videoSettings = undefined;
+    }
+  }
+  if (videoSettings === "" || videoSettings == null) {
+    videoSettings = undefined;
+  }
+
   return CreateBriefSchema.safeParse({
     ...body,
     platforms,
@@ -56,6 +68,7 @@ function parseBriefBody(body: Record<string, unknown>) {
     offer: body.offer === "" ? undefined : body.offer,
     notes: body.notes === "" ? undefined : body.notes,
     scheduledAt,
+    videoSettings,
   });
 }
 
@@ -85,6 +98,9 @@ async function createBriefWithPosts(
       platforms: input.platforms,
       cta: input.cta,
       notes: input.notes,
+      videoSettings: input.videoSettings
+        ? (input.videoSettings as Prisma.InputJsonValue)
+        : undefined,
       scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
       attachments: {
         create: saved.map((a) => ({
@@ -214,7 +230,7 @@ postsRouter.get("/:id", async (req, res) => {
   const post = await db.post.findUnique({
     where: { id: req.params.id },
     include: {
-      client: true,
+      client: { include: { brandKit: true } },
       asset: true,
       brief: true,
       approvals: true,

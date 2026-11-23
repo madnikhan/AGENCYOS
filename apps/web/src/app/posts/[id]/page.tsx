@@ -8,18 +8,29 @@ import { API_URL } from "@/lib/api";
 type Post = {
   id: string;
   platform: string;
+  contentType?: string;
   status: string;
   title: string | null;
   body: string | null;
   hashtags: string[];
   metaTitle: string | null;
   metaDescription: string | null;
+  ctaLabel?: string | null;
   confidence: number | null;
   externalUrl: string | null;
   errorMessage: string | null;
   ruleDecision: { action?: string; reasons?: string[] } | null;
-  client: { id: string; name: string };
-  asset?: { url: string; type: string } | null;
+  client: {
+    id: string;
+    name: string;
+    brandKit?: {
+      videoTemplatePreset?: string | null;
+      creatomateTemplateId?: string | null;
+      primaryColor?: string | null;
+      logoUrl?: string | null;
+    } | null;
+  };
+  asset?: { url: string; type: string; mimeType?: string | null } | null;
   approvals: Array<{ action: string; note: string | null; createdAt: string }>;
   publishAttempts: Array<{
     attemptNumber: number;
@@ -54,6 +65,17 @@ export default function PostDetailPage() {
 
   if (!post) return <p className="muted">Loading…</p>;
 
+  const isShort =
+    post.contentType === "SHORT_VIDEO" ||
+    post.platform === "YOUTUBE_SHORTS" ||
+    post.platform === "TIKTOK";
+  const isPlayableVideo =
+    !!post.asset?.url &&
+    !post.asset.url.endsWith(".svg") &&
+    (post.asset.type === "VIDEO" ||
+      post.asset.mimeType === "video/mp4" ||
+      post.asset.url.endsWith(".mp4"));
+
   return (
     <div>
       <p className="muted">
@@ -66,8 +88,46 @@ export default function PostDetailPage() {
       </p>
       {msg && <div className="panel">{msg}</div>}
       <div className="panel">
+        {isShort && post.client.brandKit && (
+          <p className="muted" style={{ marginBottom: 8 }}>
+            Template:{" "}
+            {post.client.brandKit.creatomateTemplateId
+              ? `custom ${post.client.brandKit.creatomateTemplateId.slice(0, 8)}…`
+              : post.client.brandKit.videoTemplatePreset ?? "agency default"}
+            {post.client.brandKit.primaryColor
+              ? ` · brand ${post.client.brandKit.primaryColor}`
+              : ""}
+          </p>
+        )}
+        {isShort && (post.title || post.metaDescription) && (
+          <div style={{ marginBottom: 16 }}>
+            <p className="muted" style={{ marginBottom: 6 }}>
+              On-screen (Creatomate Text-1 / Text-2)
+            </p>
+            {post.title && (
+              <p style={{ fontWeight: 600, margin: "0 0 4px" }}>
+                Text-1: {post.title}
+              </p>
+            )}
+            {post.metaDescription && (
+              <p style={{ margin: 0 }}>Text-2: {post.metaDescription}</p>
+            )}
+            {post.ctaLabel && (
+              <p className="muted" style={{ marginTop: 6 }}>
+                CTA: {post.ctaLabel}
+              </p>
+            )}
+          </div>
+        )}
         {post.body ? (
-          <p style={{ whiteSpace: "pre-wrap" }}>{post.body}</p>
+          <>
+            {isShort && (
+              <p className="muted" style={{ marginBottom: 6 }}>
+                Caption / description
+              </p>
+            )}
+            <p style={{ whiteSpace: "pre-wrap" }}>{post.body}</p>
+          </>
         ) : (
           <p className="muted">
             {post.status === "DRAFT"
@@ -80,7 +140,7 @@ export default function PostDetailPage() {
         {!!post.hashtags.length && (
           <p className="muted">{post.hashtags.map((h) => `#${h.replace(/^#/, "")}`).join(" ")}</p>
         )}
-        {post.metaTitle && (
+        {!isShort && post.metaTitle && (
           <p className="muted">
             SEO: {post.metaTitle} — {post.metaDescription}
           </p>
@@ -103,11 +163,11 @@ export default function PostDetailPage() {
         )}
         {post.asset?.url && (
           <div style={{ marginTop: 12 }}>
-            {post.asset.type === "VIDEO" &&
-            !post.asset.url.endsWith(".svg") ? (
+            {isPlayableVideo ? (
               <video
                 src={post.asset.url}
                 controls
+                playsInline
                 style={{ maxWidth: 360, borderRadius: 12, width: "100%" }}
               />
             ) : (
@@ -118,15 +178,14 @@ export default function PostDetailPage() {
                   alt=""
                   style={{ maxWidth: 360, borderRadius: 12 }}
                 />
-                {post.asset.url.endsWith(".svg") &&
-                  post.platform.includes("YOUTUBE") && (
-                    <p className="muted" style={{ marginTop: 8 }}>
-                      Placeholder image only — Creatomate did not return a real
-                      MP4. Check Settings → Creatomate API key (paste the full
-                      key, not a truncated <code>…</code> value), then
-                      Regenerate.
-                    </p>
-                  )}
+                {post.asset.url.endsWith(".svg") && isShort && (
+                  <p className="muted" style={{ marginTop: 8 }}>
+                    Placeholder image only — Creatomate did not return a real
+                    MP4. Check Settings → Creatomate API key (paste the full
+                    key, not a truncated <code>…</code> value), then
+                    Regenerate.
+                  </p>
+                )}
               </>
             )}
           </div>

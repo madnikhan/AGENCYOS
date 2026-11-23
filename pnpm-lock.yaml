@@ -77,6 +77,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@creatomate/preview':
+        specifier: ^1.6.1
+        version: 1.6.1
       '@seo/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -257,6 +260,9 @@ packages:
   '@aws/lambda-invoke-store@0.3.0':
     resolution: {integrity: sha512-sl4Bm6yiMNYrZKkqqDFWN0UfnWhlS8ivKxrYl+6t0gCLrqr8y3B2IqZZbFRkfaVVp7C/baApyh71P+LeE1A2sQ==}
     engines: {node: '>=18.0.0'}
+
+  '@creatomate/preview@1.6.1':
+    resolution: {integrity: sha512-LGq0o+9YMMOEksjreQBw/w6p8yXUFCOeJsdQDWMX6uRdcx1BspzNz4XUqrlLW5t69z7NA/j1f1n+/1lzq0DUFQ==}
 
   '@emnapi/runtime@1.11.3':
     resolution: {integrity: sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA==}
@@ -1757,6 +1763,8 @@ snapshots:
       tslib: 2.8.1
 
   '@aws/lambda-invoke-store@0.3.0': {}
+
+  '@creatomate/preview@1.6.1': {}
 
   '@emnapi/runtime@1.11.3':
     dependencies:

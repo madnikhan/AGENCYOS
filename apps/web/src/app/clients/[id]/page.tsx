@@ -4,6 +4,46 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { API_URL } from "@/lib/api";
+import CreatomateStudio, {
+  type StudioResult,
+} from "@/components/CreatomateStudio";
+
+type BrandKit = {
+  voiceTone: string;
+  tagline: string | null;
+  bannedWords: string[];
+  primaryColor: string;
+  secondaryColor: string;
+  logoUrl: string | null;
+  headingFont: string | null;
+  bodyFont: string | null;
+  ctaDefaults?: {
+    primary?: string;
+    book?: string;
+    call?: string;
+    order?: string;
+  } | null;
+  videoTemplatePreset: string | null;
+  creatomateTemplateId: string | null;
+  brandSourceUrl?: string | null;
+  brandExtractedAt?: string | null;
+};
+
+type BrandExtractPreview = {
+  logoUrl?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  headingFont?: string;
+  bodyFont?: string;
+  suggestedTagline?: string;
+  sourceUrl: string;
+};
+
+type VideoPreset = {
+  id: string;
+  name: string;
+  description: string;
+};
 
 type Client = {
   id: string;
@@ -13,11 +53,7 @@ type Client = {
   industry: string | null;
   locality: string | null;
   websiteUrl: string | null;
-  brandKit: {
-    voiceTone: string;
-    tagline: string | null;
-    bannedWords: string[];
-  } | null;
+  brandKit: BrandKit | null;
   publishRule: {
     autoPublishEnabled: boolean;
     minConfidence: number;
@@ -29,6 +65,10 @@ type Client = {
     platform: string;
     connected: boolean;
     accountLabel: string | null;
+    metadata?: {
+      canPublish?: boolean;
+      grantedScopes?: string[];
+    } | null;
   }>;
 };
 
@@ -36,6 +76,8 @@ type SettingsStatus = {
   metaConfigured: boolean;
   tiktokConfigured: boolean;
   youtubeConfigured: boolean;
+  creatomatePublicToken?: string;
+  creatomatePublicTokenConfigured?: boolean;
 };
 
 const SOCIAL = [
@@ -91,14 +133,23 @@ export default function ClientDetailPage() {
   const [manualToken, setManualToken] = useState("");
   const [manualExternalId, setManualExternalId] = useState("");
   const [manualLabel, setManualLabel] = useState("");
+  const [presets, setPresets] = useState<VideoPreset[]>([]);
+  const [extractPreview, setExtractPreview] =
+    useState<BrandExtractPreview | null>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [studioOpen, setStudioOpen] = useState(false);
 
   async function load() {
-    const [cRes, sRes] = await Promise.all([
+    const [cRes, sRes, pRes] = await Promise.all([
       fetch(`${API_URL}/clients/${params.id}`, { credentials: "include" }),
       fetch(`${API_URL}/settings`, { credentials: "include" }),
+      fetch(`${API_URL}/clients/video-templates/presets`, {
+        credentials: "include",
+      }),
     ]);
     if (cRes.ok) setClient(await cRes.json());
     if (sRes.ok) setSettings(await sRes.json());
+    if (pRes.ok) setPresets(await pRes.json());
   }
 
   useEffect(() => {
@@ -158,13 +209,30 @@ export default function ClientDetailPage() {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    const res = await fetch(`${API_URL}/clients/${params.id}/brand-kit`, { credentials: "include",
+    const logoRaw = String(fd.get("logoUrl") ?? "").trim();
+    const customTemplate = String(fd.get("creatomateTemplateId") ?? "").trim();
+    const res = await fetch(`${API_URL}/clients/${params.id}/brand-kit`, {
+      credentials: "include",
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         voiceTone: fd.get("voiceTone"),
         tagline: fd.get("tagline"),
         bannedWords: banned,
+        primaryColor: fd.get("primaryColor") || undefined,
+        secondaryColor: fd.get("secondaryColor") || undefined,
+        logoUrl: logoRaw || "",
+        headingFont: String(fd.get("headingFont") ?? "").trim() || null,
+        bodyFont: String(fd.get("bodyFont") ?? "").trim() || null,
+        ctaDefaults: {
+          primary: String(fd.get("ctaPrimary") ?? "").trim() || undefined,
+          book: String(fd.get("ctaBook") ?? "").trim() || undefined,
+          call: String(fd.get("ctaCall") ?? "").trim() || undefined,
+          order: String(fd.get("ctaOrder") ?? "").trim() || undefined,
+        },
+        videoTemplatePreset:
+          String(fd.get("videoTemplatePreset") ?? "").trim() || null,
+        creatomateTemplateId: customTemplate || null,
       }),
     });
     if (!res.ok) {
@@ -172,6 +240,83 @@ export default function ClientDetailPage() {
       return;
     }
     setMessage("Brand kit saved");
+    setExtractPreview(null);
+    await load();
+  }
+
+  async function extractBrand() {
+    setExtracting(true);
+    setMessage(null);
+    try {
+      const res = await fetch(
+        `${API_URL}/clients/${params.id}/brand/extract`,
+        {
+          credentials: "include",
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        }
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMessage(
+          typeof body.error === "string" ? body.error : "Brand extract failed"
+        );
+        return;
+      }
+      setExtractPreview(body as BrandExtractPreview);
+      setMessage("Brand preview ready — review and Apply below");
+    } finally {
+      setExtracting(false);
+    }
+  }
+
+  async function applyExtract() {
+    if (!extractPreview) return;
+    const res = await fetch(`${API_URL}/clients/${params.id}/brand-kit`, {
+      credentials: "include",
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        logoUrl: extractPreview.logoUrl || undefined,
+        primaryColor: extractPreview.primaryColor,
+        secondaryColor: extractPreview.secondaryColor,
+        headingFont: extractPreview.headingFont ?? null,
+        bodyFont: extractPreview.bodyFont ?? null,
+        tagline: extractPreview.suggestedTagline,
+        brandSourceUrl: extractPreview.sourceUrl,
+        brandExtractedAt: new Date().toISOString(),
+        brandExtractRaw: extractPreview as unknown as Record<string, unknown>,
+      }),
+    });
+    if (!res.ok) {
+      setMessage(await res.text());
+      return;
+    }
+    setMessage("Extracted brand applied to Brand Kit");
+    setExtractPreview(null);
+    await load();
+  }
+
+  async function applyStudio(result: StudioResult) {
+    const res = await fetch(`${API_URL}/clients/${params.id}/brand-kit`, {
+      credentials: "include",
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        creatomateTemplateId: result.templateId,
+        videoTemplatePreset: result.presetId || "custom",
+        creatomateFieldMap: result.fieldMap,
+        primaryColor: result.form.primaryColor || undefined,
+        secondaryColor: result.form.secondaryColor || undefined,
+        logoUrl: result.form.logoUrl || undefined,
+      }),
+    });
+    if (!res.ok) {
+      setMessage(await res.text());
+      return;
+    }
+    setMessage(`Template applied: ${result.templateId.slice(0, 8)}…`);
     await load();
   }
 
@@ -217,6 +362,15 @@ export default function ClientDetailPage() {
     return client!.channelConnections.find((c) => c.platform === platform);
   }
 
+  const fbConn = conn("FACEBOOK");
+  const fbScopes = fbConn?.metadata?.grantedScopes ?? [];
+  const fbMissingPublish =
+    fbConn?.connected &&
+    (fbConn.metadata?.canPublish === false ||
+      (fbScopes.length > 0 &&
+        (!fbScopes.includes("pages_manage_posts") ||
+          !fbScopes.includes("pages_read_engagement"))));
+
   return (
     <div>
       <h1>{client.name}</h1>
@@ -237,6 +391,17 @@ export default function ClientDetailPage() {
           {message.includes("Settings") && (
             <Link href="/settings">Open Settings →</Link>
           )}
+        </div>
+      )}
+
+      {fbMissingPublish && (
+        <div className="panel" style={{ borderColor: "var(--bad)" }}>
+          Facebook is connected but the Page token cannot publish (missing{" "}
+          <code>pages_manage_posts</code> / <code>pages_read_engagement</code>
+          ). Update your Meta Login for Business configuration, then click
+          Reconnect on Facebook below. See{" "}
+          <Link href="/settings">Settings</Link> for the required permissions
+          list.
         </div>
       )}
 
@@ -376,9 +541,96 @@ export default function ClientDetailPage() {
         </button>
       </div>
 
-      <details className="panel details-panel">
+      <details className="panel details-panel" open>
         <summary>Brand kit</summary>
-        <form className="form-grid" onSubmit={saveBrand}>
+        <div
+          style={{
+            display: "flex",
+            gap: "1rem",
+            flexWrap: "wrap",
+            alignItems: "center",
+            marginBottom: "1rem",
+          }}
+        >
+          <div
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: 12,
+              background: `linear-gradient(135deg, ${client.brandKit?.primaryColor ?? "#C45C26"}, ${client.brandKit?.secondaryColor ?? "#1A1A1A"})`,
+              display: "grid",
+              placeItems: "center",
+              overflow: "hidden",
+              border: "1px solid var(--line)",
+            }}
+          >
+            {client.brandKit?.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={client.brandKit.logoUrl}
+                alt=""
+                style={{ maxWidth: "100%", maxHeight: "100%" }}
+              />
+            ) : (
+              <span style={{ color: "#fff", fontSize: 12 }}>No logo</span>
+            )}
+          </div>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <p className="muted" style={{ margin: 0 }}>
+              Website: {client.websiteUrl ?? "not set"}
+            </p>
+            <button
+              type="button"
+              className="btn secondary"
+              style={{ marginTop: 8 }}
+              disabled={!client.websiteUrl || extracting}
+              onClick={() => void extractBrand()}
+            >
+              {extracting ? "Extracting…" : "Extract from website"}
+            </button>
+          </div>
+        </div>
+
+        {extractPreview && (
+          <div
+            className="panel"
+            style={{ borderColor: "var(--accent, #C45C26)", marginBottom: "1rem" }}
+          >
+            <p style={{ marginTop: 0 }}>
+              <strong>Extract preview</strong> from {extractPreview.sourceUrl}
+            </p>
+            <p className="muted" style={{ margin: "0 0 0.5rem" }}>
+              {[
+                extractPreview.primaryColor &&
+                  `Primary ${extractPreview.primaryColor}`,
+                extractPreview.secondaryColor &&
+                  `Secondary ${extractPreview.secondaryColor}`,
+                extractPreview.headingFont &&
+                  `Heading ${extractPreview.headingFont}`,
+                extractPreview.suggestedTagline,
+              ]
+                .filter(Boolean)
+                .join(" · ") || "No strong signals found — you can still Apply"}
+            </p>
+            {extractPreview.logoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={extractPreview.logoUrl}
+                alt="Extracted logo"
+                style={{ maxHeight: 48, marginBottom: 8 }}
+              />
+            )}
+            <button
+              type="button"
+              className="btn"
+              onClick={() => void applyExtract()}
+            >
+              Apply to Brand Kit
+            </button>
+          </div>
+        )}
+
+        <form className="form-grid" onSubmit={saveBrand} key={client.brandKit?.brandExtractedAt ?? "brand"}>
           <label>
             Voice / tone
             <textarea
@@ -392,6 +644,111 @@ export default function ClientDetailPage() {
             <input name="tagline" defaultValue={client.brandKit?.tagline ?? ""} />
           </label>
           <label>
+            Primary color
+            <input
+              name="primaryColor"
+              type="color"
+              defaultValue={client.brandKit?.primaryColor ?? "#C45C26"}
+            />
+          </label>
+          <label>
+            Secondary color
+            <input
+              name="secondaryColor"
+              type="color"
+              defaultValue={client.brandKit?.secondaryColor ?? "#1A1A1A"}
+            />
+          </label>
+          <label>
+            Logo URL
+            <input
+              name="logoUrl"
+              defaultValue={client.brandKit?.logoUrl ?? ""}
+              placeholder="https://…"
+            />
+          </label>
+          <label>
+            Heading font
+            <input
+              name="headingFont"
+              defaultValue={client.brandKit?.headingFont ?? ""}
+              placeholder="e.g. Montserrat"
+            />
+          </label>
+          <label>
+            Body font
+            <input
+              name="bodyFont"
+              defaultValue={client.brandKit?.bodyFont ?? ""}
+              placeholder="e.g. Inter"
+            />
+          </label>
+          <label>
+            CTA primary
+            <input
+              name="ctaPrimary"
+              defaultValue={client.brandKit?.ctaDefaults?.primary ?? ""}
+            />
+          </label>
+          <label>
+            CTA book
+            <input
+              name="ctaBook"
+              defaultValue={client.brandKit?.ctaDefaults?.book ?? ""}
+            />
+          </label>
+          <label>
+            CTA call
+            <input
+              name="ctaCall"
+              defaultValue={client.brandKit?.ctaDefaults?.call ?? ""}
+            />
+          </label>
+          <label>
+            CTA order / quote
+            <input
+              name="ctaOrder"
+              defaultValue={client.brandKit?.ctaDefaults?.order ?? ""}
+            />
+          </label>
+          <div>
+            <p className="muted" style={{ margin: "0 0 0.5rem" }}>
+              Video template:{" "}
+              {client.brandKit?.creatomateTemplateId
+                ? `${client.brandKit.creatomateTemplateId.slice(0, 12)}… (${client.brandKit.videoTemplatePreset ?? "custom"})`
+                : `preset ${client.brandKit?.videoTemplatePreset ?? "agency default"}`}
+            </p>
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={() => setStudioOpen(true)}
+            >
+              Open Template Studio
+            </button>
+          </div>
+          <label>
+            Video template preset
+            <select
+              name="videoTemplatePreset"
+              defaultValue={client.brandKit?.videoTemplatePreset ?? "quick_promo"}
+            >
+              {presets.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} — {p.description}
+                </option>
+              ))}
+              <option value="custom">Custom Creatomate ID (advanced)</option>
+            </select>
+          </label>
+          <label>
+            Creatomate template ID (advanced override)
+            <input
+              name="creatomateTemplateId"
+              defaultValue={client.brandKit?.creatomateTemplateId ?? ""}
+              placeholder="Leave blank to use Settings default"
+            />
+          </label>
+          <label>
             Banned words (comma-separated)
             <input
               name="bannedWords"
@@ -403,6 +760,21 @@ export default function ClientDetailPage() {
           </button>
         </form>
       </details>
+
+      <CreatomateStudio
+        open={studioOpen}
+        onClose={() => setStudioOpen(false)}
+        onApply={(r) => void applyStudio(r)}
+        publicToken={settings?.creatomatePublicToken ?? null}
+        initialTemplateId={client.brandKit?.creatomateTemplateId}
+        initialForm={{
+          logoUrl: client.brandKit?.logoUrl ?? "",
+          primaryColor: client.brandKit?.primaryColor ?? "#C45C26",
+          secondaryColor: client.brandKit?.secondaryColor ?? "#1A1A1A",
+          cta: client.brandKit?.ctaDefaults?.book ?? "Book now",
+        }}
+        title={`Template Studio — ${client.name}`}
+      />
 
       <details className="panel details-panel">
         <summary>Auto-publish rules (hybrid)</summary>

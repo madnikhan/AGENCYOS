@@ -4,9 +4,15 @@ import {
   CreateClientSchema,
   UpdateBrandKitSchema,
   UpdatePublishRuleSchema,
+  VIDEO_TEMPLATE_PRESETS,
 } from "@seo/shared";
+import { extractBrandFromWebsite } from "../brandExtract";
 
 export const clientsRouter = Router();
+
+clientsRouter.get("/video-templates/presets", (_req, res) => {
+  res.json(VIDEO_TEMPLATE_PRESETS);
+});
 
 clientsRouter.get("/", async (_req, res) => {
   const clients = await db.client.findMany({
@@ -77,15 +83,76 @@ clientsRouter.patch("/:id/brand-kit", async (req, res) => {
   if (!existing) {
     return res.status(404).json({ error: "Brand kit not found" });
   }
+  const d = parsed.data;
   const brandKit = await db.brandKit.update({
     where: { clientId },
     data: {
-      ...parsed.data,
-      logoUrl: parsed.data.logoUrl || undefined,
-      ctaDefaults: parsed.data.ctaDefaults ?? undefined,
+      voiceTone: d.voiceTone,
+      tagline: d.tagline,
+      primaryColor: d.primaryColor,
+      secondaryColor: d.secondaryColor,
+      logoUrl: d.logoUrl === "" ? null : d.logoUrl,
+      headingFont: d.headingFont === undefined ? undefined : d.headingFont,
+      bodyFont: d.bodyFont === undefined ? undefined : d.bodyFont,
+      bannedClaims: d.bannedClaims,
+      bannedWords: d.bannedWords,
+      ctaDefaults:
+        d.ctaDefaults === undefined
+          ? undefined
+          : (d.ctaDefaults as Prisma.InputJsonValue),
+      videoTemplatePreset:
+        d.videoTemplatePreset === undefined
+          ? undefined
+          : d.videoTemplatePreset,
+      creatomateTemplateId:
+        d.creatomateTemplateId === undefined
+          ? undefined
+          : d.creatomateTemplateId,
+      creatomateFieldMap:
+        d.creatomateFieldMap === undefined
+          ? undefined
+          : d.creatomateFieldMap === null
+            ? Prisma.JsonNull
+            : (d.creatomateFieldMap as Prisma.InputJsonValue),
+      brandSourceUrl:
+        d.brandSourceUrl === undefined ? undefined : d.brandSourceUrl,
+      brandExtractedAt:
+        d.brandExtractedAt === undefined
+          ? undefined
+          : d.brandExtractedAt
+            ? new Date(d.brandExtractedAt)
+            : null,
+      brandExtractRaw:
+        d.brandExtractRaw === undefined
+          ? undefined
+          : d.brandExtractRaw === null
+            ? Prisma.JsonNull
+            : (d.brandExtractRaw as Prisma.InputJsonValue),
     },
   });
   res.json(brandKit);
+});
+
+clientsRouter.post("/:id/brand/extract", async (req, res) => {
+  const client = await db.client.findUnique({ where: { id: req.params.id } });
+  if (!client) return res.status(404).json({ error: "Client not found" });
+  const overrideUrl =
+    typeof req.body?.websiteUrl === "string"
+      ? req.body.websiteUrl.trim()
+      : "";
+  const websiteUrl = overrideUrl || client.websiteUrl;
+  if (!websiteUrl) {
+    return res.status(400).json({
+      error: "Client has no website URL — set one on the client or pass websiteUrl",
+    });
+  }
+  try {
+    const preview = await extractBrandFromWebsite(websiteUrl);
+    res.json(preview);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(400).json({ error: message });
+  }
 });
 
 clientsRouter.patch("/:id/publish-rules", async (req, res) => {

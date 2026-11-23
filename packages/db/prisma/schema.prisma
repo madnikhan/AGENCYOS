@@ -111,9 +111,20 @@ model BrandKit {
   primaryColor   String   @default("#C45C26")
   secondaryColor String   @default("#1A1A1A")
   logoUrl        String?
+  headingFont    String?
+  bodyFont       String?
   bannedClaims   String[] @default([])
   bannedWords    String[] @default([])
   ctaDefaults    Json     @default("{\"primary\":\"Contact us\",\"book\":\"Book now\",\"call\":\"Call us\",\"order\":\"Get a quote\"}")
+  /** Curated video preset id, or "custom" when using creatomateTemplateId */
+  videoTemplatePreset String?
+  /** Advanced: paste Creatomate template UUID */
+  creatomateTemplateId String?
+  /** Optional Creatomate modification key map override */
+  creatomateFieldMap   Json?
+  brandSourceUrl       String?
+  brandExtractedAt     DateTime?
+  brandExtractRaw      Json?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
@@ -163,6 +174,8 @@ model ContentBrief {
   platforms         Platform[]
   cta               String      @default("order")
   notes             String?
+  /** Shorts override: { templateId, modifications, fieldMap, presetId } */
+  videoSettings     Json?
   scheduledAt       DateTime?
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
@@ -285,6 +298,8 @@ model AgencySettings {
   googleRedirectUri      String?
   creatomateApiKeyEnc    String?
   creatomateTemplateId   String?
+  /** Browser Preview SDK token (safe to expose to authenticated dashboard) */
+  creatomatePublicToken  String?
   slackWebhookUrl        String?
   resendApiKeyEnc        String?
   notifyEmailFrom        String?
